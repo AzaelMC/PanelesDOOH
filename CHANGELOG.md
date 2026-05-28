@@ -1413,3 +1413,64 @@ Todos los componentes están documentados, los servicios están preparados, el b
 **Documento creado**: 18 de Mayo 2024
 **Versión**: 1.0.0-alpha
 **Última actualización**: Fase 1 Completada
+
+
+---
+### Modificaciones Sam
+
+## Actualizacion 2026-05-28 - Google Maps y Street View funcional
+
+### Resumen
+
+Se integro Google Maps JavaScript API en la vista cliente de mapa para renderizar ubicaciones reales a partir de latitud y longitud, asi como Street View interactivo mediante `StreetViewPanorama`.
+
+Esta actualizacion reemplaza funcionalmente los placeholders de mapa y Street View existentes, manteniendo la estructura actual del proyecto y sin modificar el contrato de datos de `pantallasMock.js`.
+
+### Cambios principales
+
+- Se agrego carga centralizada de Google Maps mediante `@googlemaps/js-api-loader`.
+- Se agrego soporte para la variable de entorno `VITE_GOOGLE_MAPS_API_KEY`.
+- Se agrego `.env.example` como plantilla segura de configuracion.
+- Se agrego una capa intermedia para preparar y validar pantallas antes de renderizarlas en mapa.
+- Se reemplazo funcionalmente el contenido de `LienzoMapaPlaceholder.jsx` para mostrar Google Maps real.
+- Se reemplazo funcionalmente el contenido de `ModalStreetViewPlaceholder.jsx` para mostrar Street View interactivo real.
+- Se agrego fallback para ubicaciones sin coordenadas validas.
+- Se agrego fallback para ubicaciones sin panorama disponible de Street View.
+- Se corrigio la estructura de botones anidados en `PanelListadoPantallas.jsx`.
+
+### Archivos creados
+
+- `.env.example`
+- `src/services/googleMapsLoader.js`
+- `src/features/mapa-cliente/utils/prepararPantallasMapa.js`
+
+### Archivos modificados
+
+- `package.json`
+- `package-lock.json`
+- `src/config/env.js`
+- `src/features/mapa-cliente/components/LienzoMapaPlaceholder.jsx`
+- `src/features/mapa-cliente/components/ModalStreetViewPlaceholder.jsx`
+- `src/features/mapa-cliente/components/PanelListadoPantallas.jsx`
+
+### Alcance tecnico
+
+La integracion actual utiliza:
+
+- `Maps JavaScript API`
+- `Dynamic Maps`
+- `StreetViewPanorama` dentro de Maps JavaScript API
+- Marcadores basados en latitud/longitud
+- Datos actuales/mock del proyecto
+
+### Notas de seguridad
+
+- La API key no se escribe directamente en componentes.
+- La API key debe configurarse localmente en `.env.local`.
+- `.env.local` debe permanecer fuera de Git.
+
+### Pendientes
+
+- Migrar `google.maps.Marker` a `google.maps.marker.AdvancedMarkerElement`.
+- Crear un Map ID real.
+- Revisar `ERR_BLOCKED_BY_CLIENT` en navegador, probablemente relacionado con Brave Shields, adblock o extensiones de privacidad.
