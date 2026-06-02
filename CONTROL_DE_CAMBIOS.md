@@ -1,5 +1,60 @@
 # Control de Cambios
 
+## 2026-06-01 - Persistencia real de cotizaciones
+
+### Agregado
+- Integracion con GET /cotizaciones.php.
+- Integracion con POST /cotizaciones.php.
+- Integracion con GET /cotizacion.php?id=.
+- Integracion con PUT /cotizacion.php?id=.
+- Integracion con GET /usuarios.php.
+- Nueva Cotizacion guarda en MySQL mediante API externa.
+- Historial muestra cotizaciones reales.
+- Tratamiento consume cotizacion real desde backend.
+- Usuarios del sistema consume usuarios reales.
+
+### Modificado
+- sessionStorage deja de ser el flujo principal de guardado.
+- Mocks de cotizaciones y usuarios quedan solo como respaldo de desarrollo.
+- Grilla de tratamiento trabaja con cotizacion_id real.
+
+### Restricciones respetadas
+- Sin backend dentro del repositorio.
+- Sin SQL.
+- Sin tablas fisicas por cotizacion.
+- Sin crear una cotizacion nueva por cada edicion.
+
+## 2026-06-01 - Correccion de autenticacion real
+
+### Modificado
+- `src/config/env.js`
+- `src/services/apiClient.js`
+- `src/features/autenticacion/services/autenticacionApi.js`
+- `src/features/autenticacion/context/ContextoAutenticacion.jsx`
+- `src/features/autenticacion/components/FormularioLogin.jsx`
+- `src/routes/RutaPrivada.jsx`
+- `src/routes/AppRouter.jsx`
+- `src/components/layout/Encabezado.jsx`
+- `src/features/panel/pages/PanelPrincipal.jsx`
+- `README.md`
+- `docs/api-contract.md`
+- `.env.local`
+
+### Cambios funcionales
+- VITE_AUTH_MOCK ahora solo activa mock si su valor es exactamente true.
+- Login real ya no permite fallback a mock.
+- Si la API falla, el usuario no entra al sistema.
+- apiClient agrega Authorization Bearer.
+- Formulario de login usa correo.
+- Encabezado y panel muestran Usuarios solo para rol administrador.
+- Ruta /usuarios queda protegida por rol administrador.
+
+### Restricciones respetadas
+- Sin backend dentro del repositorio.
+- Sin SQL.
+- Sin credenciales reales hardcodeadas.
+- Modo mock conservado solo cuando VITE_AUTH_MOCK=true.
+
 ## 2026-05-20 - Nomenclatura en espanol
 
 ### Agregado

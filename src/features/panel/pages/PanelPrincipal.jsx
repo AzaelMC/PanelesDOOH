@@ -1,4 +1,5 @@
 import Tarjeta from '../../../components/ui/Tarjeta'
+import { useAutenticacion } from '../../autenticacion/context/useAutenticacion'
 import TarjetaModulo from '../components/TarjetaModulo'
 
 const modulos = [
@@ -14,7 +15,7 @@ const modulos = [
     ruta: '/cotizaciones/nueva'
   },
   {
-    titulo: 'Historial de Cotizaciones Anteriores',
+    titulo: 'Historial de Cotizaciones',
     descripcion:
       'Listado indexado de propuestas guardadas con opcion de filtrado rapido por nombre de campana, cliente y responsable creador.',
     estado: {
@@ -25,19 +26,26 @@ const modulos = [
     ruta: '/cotizaciones/historial'
   },
   {
-    titulo: 'Modulo de Usuarios del Sistema',
+    titulo: 'Usuarios del Sistema',
     descripcion:
-      'Panel interno para revisar credenciales vigentes, auditar actividad operacional y entender quien origino cada propuesta.',
+      'Panel interno para revisar credenciales vigentes, auditar actividad operacional y administrar acceso por rol.',
     estado: {
       status: 'warning',
-      label: 'Interno'
+      label: 'Administrador'
     },
     etiquetaBoton: 'Ver usuarios',
-    ruta: '/usuarios'
+    ruta: '/usuarios',
+    soloAdministrador: true
   }
 ]
 
 export default function PanelPrincipal() {
+  const { usuario } = useAutenticacion()
+
+  const modulosVisibles = modulos.filter((modulo) => (
+    !modulo.soloAdministrador || usuario?.rol === 'administrador'
+  ))
+
   return (
     <div className="space-y-8">
       <section className="space-y-4">
@@ -47,11 +55,11 @@ export default function PanelPrincipal() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl space-y-3">
             <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
-              Opera cotizaciones, usuarios y validacion geografica desde un unico flujo.
+              Opera cotizaciones y validacion geografica desde un unico flujo.
             </h2>
             <p className="text-base leading-8 text-slate-600">
-              Esta base administrativa deja el frontend listo para integrar autenticacion real,
-              parser avanzado y conexiones a la API PHP 8 externa en las siguientes fases.
+              El panel ya valida autenticacion real contra la API externa y muestra cada modulo segun
+              el rol de la cuenta activa.
             </p>
           </div>
 
@@ -59,16 +67,16 @@ export default function PanelPrincipal() {
             <p className="text-xs uppercase tracking-[0.28em] text-slate-300">
               Estado operativo
             </p>
-            <p className="text-3xl font-semibold">Frontend activo</p>
+            <p className="text-3xl font-semibold">Acceso verificado</p>
             <p className="text-sm text-slate-300">
-              Rutas protegidas, modulos base y flujos mock listos para evolucionar.
+              Sesion real, rutas protegidas y visibilidad por rol activas.
             </p>
           </Tarjeta>
         </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        {modulos.map((modulo) => (
+        {modulosVisibles.map((modulo) => (
           <TarjetaModulo key={modulo.titulo} {...modulo} />
         ))}
       </section>

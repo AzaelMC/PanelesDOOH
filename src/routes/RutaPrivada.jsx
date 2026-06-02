@@ -17,21 +17,25 @@ function PantallaCargaPrivada() {
   )
 }
 
-export default function RutaPrivada() {
+export default function RutaPrivada({ children, rolesPermitidos }) {
   const location = useLocation()
-  const { autenticado, cargandoSesion } = useAutenticacion()
+  const { autenticado, cargandoSesion, usuario } = useAutenticacion()
 
   if (cargandoSesion) {
     return <PantallaCargaPrivada />
   }
 
-  if (!autenticado) {
+  if (!autenticado || !usuario) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (rolesPermitidos?.length && !rolesPermitidos.includes(usuario.rol)) {
+    return <Navigate to="/panel" replace />
   }
 
   return (
     <DisenoAplicacion>
-      <Outlet />
+      {children || <Outlet />}
     </DisenoAplicacion>
   )
 }

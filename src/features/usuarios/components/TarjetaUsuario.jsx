@@ -2,11 +2,13 @@ import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
 
 function getStatusVariant(status) {
-  if (status === 'Vigentes') {
+  const normalized = String(status || '').toLowerCase()
+
+  if (normalized === 'activo' || normalized === 'vigentes' || normalized === 'vigente') {
     return 'success'
   }
 
-  if (status === 'Pendientes') {
+  if (normalized === 'pendientes' || normalized === 'pendiente') {
     return 'warning'
   }
 
@@ -14,11 +16,21 @@ function getStatusVariant(status) {
 }
 
 function formatDate(date) {
+  if (!date) {
+    return '-'
+  }
+
+  const parsed = new Date(date)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date
+  }
+
   return new Intl.DateTimeFormat('es-MX', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
-  }).format(new Date(date))
+  }).format(parsed)
 }
 
 export default function TarjetaUsuario({ usuario }) {
@@ -27,7 +39,7 @@ export default function TarjetaUsuario({ usuario }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-lg font-semibold text-slate-950">{usuario.nombre}</p>
-          <p className="mt-1 text-sm text-slate-500">{usuario.rol}</p>
+          <p className="mt-1 text-sm text-slate-500">{usuario.correo || usuario.rol}</p>
         </div>
         <EtiquetaEstado status={getStatusVariant(usuario.estadoCredenciales)}>
           {usuario.estadoCredenciales}
@@ -36,8 +48,8 @@ export default function TarjetaUsuario({ usuario }) {
 
       <dl className="grid gap-4 sm:grid-cols-2">
         <div>
-          <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Area</dt>
-          <dd className="mt-2 text-sm text-slate-800">{usuario.area}</dd>
+          <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Rol</dt>
+          <dd className="mt-2 text-sm text-slate-800">{usuario.rol || '-'}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Ultimo acceso</dt>
@@ -47,6 +59,12 @@ export default function TarjetaUsuario({ usuario }) {
           <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Cotizaciones</dt>
           <dd className="mt-2 text-sm text-slate-800">{usuario.totalCotizacionesCreadas}</dd>
         </div>
+        {usuario.area && (
+          <div>
+            <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Area</dt>
+            <dd className="mt-2 text-sm text-slate-800">{usuario.area}</dd>
+          </div>
+        )}
       </dl>
     </Tarjeta>
   )

@@ -2,7 +2,7 @@
 
 ## Resumen
 
-DOOH Maps es una base administrativa frontend-only preparada para conectar con una API PHP 8 externa. La app ya incluye autenticacion mock temporal, rutas protegidas, parser frontend de Excel y CSV, modulos operativos y placeholders para integraciones futuras.
+DOOH Maps es una base administrativa frontend-only preparada para conectar con una API PHP 8 externa. La app ya incluye autenticacion real por API, rutas protegidas, control de roles, parser frontend de Excel y CSV, persistencia real de cotizaciones, y placeholders para integraciones futuras de mapa.
 
 ## Estructura de directorios
 
@@ -125,17 +125,20 @@ src/
 
 - define las rutas publicas y privadas del sistema
 - protege las pantallas internas con `RutaPrivada`
+- restringe `/usuarios` al rol `administrador`
 
 ### `features/autenticacion`
 
 - encapsula login, contexto de sesion y servicio de autenticacion
-- soporta `VITE_AUTH_MOCK=true` para desarrollo controlado
+- usa autenticacion real por API cuando `VITE_AUTH_MOCK` no es exactamente `true`
+- conserva un mock controlado solo para desarrollo intencional
 
 ### `features/cotizaciones`
 
 - administra la captura preliminar de campana y cliente
 - integra el parser real de Excel y CSV
-- genera cotizaciones temporales antes de enviarlas al backend real
+- guarda cotizaciones reales en backend antes de navegar a tratamiento
+- consume historial real desde `GET /cotizaciones.php`
 
 ### `features/excel-import`
 
@@ -149,14 +152,20 @@ src/
 
 ### `features/tratamiento`
 
-- consume cotizaciones temporales desde `sessionStorage`
+- carga cotizaciones reales por `cotizacionId`
 - prepara la grilla editable visual
 - permite borrado logico activo/inactivo
-- contiene el motor matematico base para columnas derivadas
+- guarda cambios con `PUT /cotizacion.php?id=`
+- conserva `sessionStorage` solo como respaldo cuando `VITE_AUTH_MOCK=true`
+
+### `features/usuarios`
+
+- consulta usuarios reales desde `GET /usuarios.php`
+- mantiene el modulo disponible solo para administradores
 
 ### `features/mapa-cliente`
 
-- resuelve la visualizacion dual cliente final
+- reutiliza la cotizacion real para la vista placeholder de mapa
 - mantiene placeholders de mapa y Street View hasta la siguiente fase
 
 ## Integracion con backend externo
@@ -165,7 +174,7 @@ Los servicios frontend esperan una API PHP 8 externa y no crean backend dentro d
 
 Puntos clave:
 
-1. `apiClient.js` centraliza la comunicacion HTTP.
-2. `autenticacionApi.js`, `cotizacionesApi.js`, `usuariosApi.js` y `locationsApi.js` apuntan a endpoints futuros.
-3. La persistencia final de cotizaciones reemplazara el uso temporal de `sessionStorage`.
-4. Los archivos reales de proveedor pueden revisarse localmente en `tmp/` sin formar parte del repositorio.
+1. `apiClient.js` centraliza la comunicacion HTTP, el parseo JSON y el header Bearer.
+2. `cotizacionesApi.js` normaliza respuestas reales de cotizaciones, detalle y edicion.
+3. `usuariosApi.js` normaliza el listado real de usuarios.
+4. `sessionStorage` deja de ser el flujo principal de guardado y queda solo como respaldo de desarrollo.

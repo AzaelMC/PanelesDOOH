@@ -4,15 +4,17 @@ import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
 
 function obtenerStatus(estado) {
-  if (estado === 'Lista para cliente') {
+  const normalized = String(estado || '').toLowerCase()
+
+  if (normalized.includes('lista') || normalized.includes('cliente')) {
     return 'success'
   }
 
-  if (estado === 'Pendiente de carga') {
+  if (normalized.includes('pendiente')) {
     return 'warning'
   }
 
-  if (estado === 'Validacion geografica') {
+  if (normalized.includes('validacion') || normalized.includes('geografica')) {
     return 'info'
   }
 
@@ -20,11 +22,21 @@ function obtenerStatus(estado) {
 }
 
 function formatDate(date) {
+  if (!date) {
+    return '-'
+  }
+
+  const parsed = new Date(date)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date
+  }
+
   return new Intl.DateTimeFormat('es-MX', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
-  }).format(new Date(date))
+  }).format(parsed)
 }
 
 export default function TarjetaCotizacion({ cotizacion }) {
@@ -43,13 +55,16 @@ export default function TarjetaCotizacion({ cotizacion }) {
         <div className="rounded-3xl bg-slate-100 px-4 py-3 text-right">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pantallas</p>
           <p className="text-xl font-semibold text-slate-950">{cotizacion.totalPantallas}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Activas: {cotizacion.totalPantallasActivas}
+          </p>
         </div>
       </div>
 
       <dl className="grid gap-4 sm:grid-cols-2">
         <div>
           <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Creada por</dt>
-          <dd className="mt-2 text-sm font-medium text-slate-800">{cotizacion.usuarioCreadorNombre}</dd>
+          <dd className="mt-2 text-sm font-medium text-slate-800">{cotizacion.usuarioCreadorNombre || '-'}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Fecha</dt>

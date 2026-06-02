@@ -1,110 +1,132 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { AUTH_MOCK_ENABLED } from '../../../config/env'
+import Boton from '../../../components/ui/Boton'
 import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
-import { cotizacionesMock } from '../../cotizaciones/data/cotizacionesMock'
+import { useAutenticacion } from '../../autenticacion/context/useAutenticacion'
 import BarraOperaciones from '../components/BarraOperaciones'
 import BotonAgregarColumna from '../components/BotonAgregarColumna'
 import GrillaTratamiento from '../components/GrillaTratamiento'
 import ResumenPresupuesto from '../components/ResumenPresupuesto'
-import { tratamientoCotizacionMock } from '../data/tratamientoCotizacionMock'
+import {
+  actualizarCotizacion,
+  obtenerCotizacionPorId
+} from '../../cotizaciones/services/cotizacionesApi'
 import { aplicarOperacionMatematica } from '../utils/aplicarOperacionMatematica'
-import { eliminarColumnaMaps } from '../utils/eliminarColumnaMaps'
 
-const STORAGE_KEY = 'dooh_cotizacion_temporal'
-
-function compactarFilaTemporal(fila = {}) {
-  const filaCompacta = { ...fila }
-  delete filaCompacta.rawPayload
-  return filaCompacta
-}
-
-function buildFallbackCotizacion(cotizacionId) {
-  const cotizacion = cotizacionesMock.find((item) => item.id === cotizacionId) || cotizacionesMock[0]
-  const limpieza = eliminarColumnaMaps(
-    tratamientoCotizacionMock.columnas,
-    tratamientoCotizacionMock.filas
-  )
-
-  return {
-    cotizacion: {
-      ...cotizacion,
-      nombreArchivo: 'demo-operativo.xlsx',
-      nombreHoja: 'Inventory - Screens',
-      usuarioCreadorNombre: cotizacion.usuarioCreadorNombre || 'Sesion actual',
-      notasInternas: '',
-      totalPantallas: limpieza.filasLimpias.length
-    },
-    columnas: limpieza.columnasLimpias,
-    filas: limpieza.filasLimpias.map((fila) => ({
-      ...fila,
-      id: fila.id || fila.idTemporal
-    })),
-    esTemporal: false
-  }
-}
-
-function buildTemporalState(cotizacionTemporal) {
-  return {
-    cotizacion: {
-      ...cotizacionTemporal,
-      usuarioCreadorNombre: cotizacionTemporal.usuarioCreadorNombre || 'Sesion actual'
-    },
-    columnas: cotizacionTemporal.columnas || [],
-    filas: (cotizacionTemporal.ubicaciones || []).map((ubicacion) => ({
-      ...compactarFilaTemporal(ubicacion),
-      id: ubicacion.id || ubicacion.idTemporal
-    })),
-    esTemporal: true
-  }
-}
-
-function obtenerCotizacionTemporalStorage() {
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function buildSourceState(cotizacionId) {
-  const temporal = obtenerCotizacionTemporalStorage()
-
-  if (temporal?.id === cotizacionId) {
-    return buildTemporalState(temporal)
+function formatDate(date) {
+  if (!date) {
+    return '-'
   }
 
-  return buildFallbackCotizacion(cotizacionId)
+  const parsed = new Date(date)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date
+  }
+
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }).format(parsed)
+}
+
+function resolverPuedeEditar(usuario, cotizacion) {
+  if (!usuario || !cotizacion) {
+    return false
+  }
+
+  if (usuario.rol === 'administrador') {
+    return true
+  }
+
+  if (typeof cotizacion.puedeEditar === 'boolean') {
+    return cotizacion.puedeEditar
+  }
+
+  return String(cotizacion.usuarioCreadorId) === String(usuario.id)
+}
+
+function applyCotizacionToState(cotizacion, setCotizacion, setColumnas, setFilas) {
+  setCotizacion(cotizacion)
+  setColumnas(cotizacion.columnas || [])
+  setFilas(cotizacion.ubicaciones || [])
+}
+
+function buildOperacionColumnKey(label = '') {
+  return label
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '_')
+}
+
+function buildPantallaResumenTexto(cotizacion, filas) {
+  const totalPantallas = cotizacion?.totalPantallas || filas.length
+  const totalActivas = cotizacion?.totalPantallasActivas || filas.filter((fila) => fila.is_active).length
+
+  return `${totalActivas} activas de ${totalPantallas}`
 }
 
 function TratamientoCotizacionContenido({ cotizacionId }) {
-  const [sourceState] = useState(() => buildSourceState(cotizacionId))
-  const [columnas, setColumnas] = useState(sourceState.columnas)
-  const [filas, setFilas] = useState(sourceState.filas)
+  const { usuario } = useAutenticacion()
+  const [cotizacion, setCotizacion] = useState(null)
+  const [columnas, setColumnas] = useState([])
+  const [filas, setFilas] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const [mensajeExito, setMensajeExito] = useState('')
+  const [hayCambios, setHayCambios] = useState(false)
 
   useEffect(() => {
-    if (!sourceState.esTemporal) {
-      return
+    let active = true
+
+    async function cargarCotizacion() {
+      setCargando(true)
+      setError('')
+      setMensajeExito('')
+      setHayCambios(false)
+
+      try {
+        const detalle = await obtenerCotizacionPorId(cotizacionId)
+
+        if (!active) {
+          return
+        }
+
+        applyCotizacionToState(detalle, setCotizacion, setColumnas, setFilas)
+      } catch (loadError) {
+        if (!active) {
+          return
+        }
+
+        setCotizacion(null)
+        setColumnas([])
+        setFilas([])
+        setError(loadError.message || 'No fue posible cargar la cotizacion.')
+      } finally {
+        if (active) {
+          setCargando(false)
+        }
+      }
     }
 
-    const temporal = obtenerCotizacionTemporalStorage()
+    cargarCotizacion()
 
-    if (!temporal || temporal.id !== cotizacionId) {
-      return
+    return () => {
+      active = false
     }
+  }, [cotizacionId])
 
-    window.sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        ...temporal,
-        columnas,
-        ubicaciones: filas.map(compactarFilaTemporal),
-        totalPantallas: filas.length,
-        totalPantallasActivas: filas.filter((fila) => fila.is_active).length
-      })
-    )
-  }, [columnas, filas, cotizacionId, sourceState.esTemporal])
+  const puedeEditar = useMemo(
+    () => resolverPuedeEditar(usuario, cotizacion),
+    [cotizacion, usuario]
+  )
 
   const columnasNumericas = useMemo(
     () =>
@@ -115,6 +137,8 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
   )
 
   const handleAgregarColumna = ({ key, label }) => {
+    setMensajeExito('')
+    setHayCambios(true)
     setColumnas((current) => [
       ...current,
       {
@@ -134,19 +158,27 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
   }
 
   const handleAlternarFila = (rowId) => {
+    setMensajeExito('')
+    setHayCambios(true)
     setFilas((current) =>
       current.map((fila) =>
-        fila.id === rowId
-          ? { ...fila, is_active: !fila.is_active }
+        String(fila.id) === String(rowId)
+          ? {
+              ...fila,
+              is_active: !fila.is_active,
+              status: fila.is_active ? 'Inactiva' : 'Lista'
+            }
           : fila
       )
     )
   }
 
   const handleActualizarCelda = (rowId, columnKey, value) => {
+    setMensajeExito('')
+    setHayCambios(true)
     setFilas((current) =>
       current.map((fila) =>
-        fila.id === rowId
+        String(fila.id) === String(rowId)
           ? { ...fila, [columnKey]: value }
           : fila
       )
@@ -154,13 +186,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
   }
 
   const handleAplicarOperacion = (payload) => {
-    const columnaResultadoKey = payload.columnaResultado
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '_')
+    const columnaResultadoKey = buildOperacionColumnKey(payload.columnaResultado)
 
     if (!columnaResultadoKey) {
       return
@@ -184,7 +210,69 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
       ])
     }
 
+    setMensajeExito('')
+    setHayCambios(true)
     setFilas(filasActualizadas)
+  }
+
+  const handleGuardarCambios = async () => {
+    if (!cotizacion || !puedeEditar) {
+      return
+    }
+
+    setGuardando(true)
+    setError('')
+    setMensajeExito('')
+
+    try {
+      const payload = {
+        ...cotizacion,
+        columnas,
+        ubicaciones: filas,
+        totalPantallas: filas.length,
+        totalPantallasActivas: filas.filter((fila) => fila.is_active).length
+      }
+
+      const response = await actualizarCotizacion(cotizacion.id || cotizacionId, payload)
+      const siguienteCotizacion = response.cotizacion || await obtenerCotizacionPorId(cotizacion.id || cotizacionId)
+
+      applyCotizacionToState(siguienteCotizacion, setCotizacion, setColumnas, setFilas)
+      setHayCambios(false)
+      setMensajeExito(response.mensaje || 'Cambios guardados correctamente.')
+    } catch (saveError) {
+      setError(saveError.message || 'No fue posible guardar los cambios.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (cargando) {
+    return (
+      <Tarjeta className="text-center">
+        <p className="text-lg font-medium text-slate-900">Cargando cotizacion...</p>
+        <p className="mt-2 text-sm text-slate-500">
+          Consultando GET /cotizacion.php?id={cotizacionId} para recuperar el tratamiento real.
+        </p>
+      </Tarjeta>
+    )
+  }
+
+  if (error && !cotizacion) {
+    return (
+      <Tarjeta className="space-y-4 text-center">
+        <p className="text-lg font-medium text-slate-900">No fue posible abrir la cotizacion.</p>
+        <p className="text-sm text-rose-700">{error}</p>
+        {!AUTH_MOCK_ENABLED && (
+          <p className="text-sm text-slate-500">
+            En modo real no se aplica fallback silencioso a mocks.
+          </p>
+        )}
+      </Tarjeta>
+    )
+  }
+
+  if (!cotizacion) {
+    return null
   }
 
   return (
@@ -197,56 +285,75 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
                 Tratamiento operativo
               </p>
               <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
-                {sourceState.cotizacion.nombreCampana}
+                {cotizacion.nombreCampana}
               </h2>
-              <p className="text-base text-slate-600">{sourceState.cotizacion.cliente}</p>
+              <p className="text-base text-slate-600">{cotizacion.cliente}</p>
             </div>
 
-            <EtiquetaEstado status="pending">{sourceState.cotizacion.estado || 'borrador'}</EtiquetaEstado>
+            <div className="flex flex-col items-end gap-3">
+              <EtiquetaEstado status="pending">{cotizacion.estado || 'borrador'}</EtiquetaEstado>
+              <Boton
+                onClick={handleGuardarCambios}
+                loading={guardando}
+                disabled={!puedeEditar || !hayCambios}
+              >
+                Guardar cambios
+              </Boton>
+            </div>
           </div>
 
           <dl className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
             <div>
               <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Archivo</dt>
               <dd className="mt-2 text-sm font-medium text-slate-900">
-                {sourceState.cotizacion.nombreArchivo || 'demo-operativo.xlsx'}
+                {cotizacion.nombreArchivo || '-'}
               </dd>
             </div>
             <div>
               <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Hoja</dt>
               <dd className="mt-2 text-sm font-medium text-slate-900">
-                {sourceState.cotizacion.nombreHoja || 'Inventory - Screens'}
+                {cotizacion.nombreHoja || '-'}
               </dd>
             </div>
             <div>
               <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Pantallas</dt>
-              <dd className="mt-2 text-sm font-medium text-slate-900">{filas.length}</dd>
+              <dd className="mt-2 text-sm font-medium text-slate-900">
+                {buildPantallaResumenTexto(cotizacion, filas)}
+              </dd>
             </div>
             <div>
               <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Usuario creador</dt>
               <dd className="mt-2 text-sm font-medium text-slate-900">
-                {sourceState.cotizacion.usuarioCreadorNombre}
+                {cotizacion.usuarioCreadorNombre || '-'}
               </dd>
             </div>
             <div>
               <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Fecha</dt>
               <dd className="mt-2 text-sm font-medium text-slate-900">
-                {new Intl.DateTimeFormat('es-MX', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric'
-                }).format(new Date(sourceState.cotizacion.fechaCreacion))}
+                {formatDate(cotizacion.fechaCreacion)}
               </dd>
             </div>
           </dl>
+
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          {mensajeExito && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {mensajeExito}
+            </div>
+          )}
         </Tarjeta>
 
         <Tarjeta className="space-y-4">
           <h3 className="text-lg font-semibold text-slate-950">Observaciones del flujo</h3>
           <ul className="space-y-3 text-sm leading-7 text-slate-600">
-            <li>Si existe una cotizacion temporal en sessionStorage y coincide con la ruta, se prioriza esa fuente.</li>
-            <li>La columna Maps ya fue eliminada antes de llegar a esta grilla.</li>
-            <li>Las columnas manuales y calculadas se mantienen solo en estado temporal frontend.</li>
+            <li>La cotizacion se carga desde backend por `cotizacion_id`.</li>
+            <li>Las ediciones locales se guardan con `PUT /cotizacion.php?id=` sobre el mismo registro.</li>
+            <li>{puedeEditar ? 'Tu perfil puede editar esta cotizacion.' : 'Tu perfil solo tiene acceso de lectura en esta cotizacion.'}</li>
           </ul>
         </Tarjeta>
       </section>
@@ -257,6 +364,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
         <BarraOperaciones
           columnasNumericas={columnasNumericas}
           onAplicarOperacion={handleAplicarOperacion}
+          disabled={!puedeEditar}
         />
         <div className="2xl:min-w-[320px]">
           <Tarjeta className="h-full space-y-5">
@@ -269,6 +377,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
             <BotonAgregarColumna
               columnasExistentes={columnas}
               onAgregarColumna={handleAgregarColumna}
+              disabled={!puedeEditar}
             />
           </Tarjeta>
         </div>
@@ -279,6 +388,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
         filas={filas}
         onAlternarFila={handleAlternarFila}
         onActualizarCelda={handleActualizarCelda}
+        editable={puedeEditar}
       />
     </div>
   )

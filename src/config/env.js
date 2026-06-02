@@ -1,28 +1,18 @@
 /**
- * Configuracion del entorno.
- * Lee variables de Vite para apuntar a una API externa
- * y controlar el modo temporal de autenticacion mock.
+ * Configuracion del entorno para autenticacion y API externa.
  */
 
-function parseBoolean(value, fallback = false) {
-  if (typeof value === 'boolean') {
-    return value
-  }
+const rawAuthMock = import.meta.env.VITE_AUTH_MOCK
 
-  if (typeof value !== 'string') {
-    return fallback
-  }
+export const AUTH_MOCK_ENABLED = rawAuthMock === 'true'
 
-  const normalized = value.trim().toLowerCase()
-  return ['1', 'true', 'yes', 'on'].includes(normalized)
-}
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-const AUTH_MOCK_ENABLED = parseBoolean(import.meta.env.VITE_AUTH_MOCK, import.meta.env.DEV)
-
-export {
-  API_BASE_URL,
-  AUTH_MOCK_ENABLED
+if (import.meta.env.DEV) {
+  console.info('[DOOH Auth]', {
+    API_BASE_URL,
+    AUTH_MOCK_ENABLED
+  })
 }
 
 export default {

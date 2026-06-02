@@ -1,43 +1,95 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Boton from '../../../components/ui/Boton'
 import Tarjeta from '../../../components/ui/Tarjeta'
 import FiltrosCotizaciones from '../components/FiltrosCotizaciones'
 import TarjetaCotizacion from '../components/TarjetaCotizacion'
-import { cotizacionesMock } from '../data/cotizacionesMock'
+import { obtenerCotizaciones } from '../services/cotizacionesApi'
 
 export default function HistorialCotizaciones() {
   const [busqueda, setBusqueda] = useState('')
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('')
+  const [estatusSeleccionado, setEstatusSeleccionado] = useState('')
+  const [cotizaciones, setCotizaciones] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    async function cargarCotizaciones() {
+      setCargando(true)
+      setError('')
+
+      try {
+        const response = await obtenerCotizaciones()
+
+        if (active) {
+          setCotizaciones(response.cotizaciones)
+        }
+      } catch (loadError) {
+        if (active) {
+          setCotizaciones([])
+          setError(loadError.message || 'No fue posible cargar las cotizaciones.')
+        }
+      } finally {
+        if (active) {
+          setCargando(false)
+        }
+      }
+    }
+
+    cargarCotizaciones()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const usuarios = useMemo(() => {
     const uniqueUsers = new Map()
 
-    cotizacionesMock.forEach((cotizacion) => {
+    cotizaciones.forEach((cotizacion) => {
       if (!uniqueUsers.has(cotizacion.usuarioCreadorId)) {
         uniqueUsers.set(cotizacion.usuarioCreadorId, {
           id: cotizacion.usuarioCreadorId,
-          nombre: cotizacion.usuarioCreadorNombre
+          nombre: cotizacion.usuarioCreadorNombre || 'Sin asignar'
         })
       }
     })
 
     return Array.from(uniqueUsers.values())
-  }, [])
+  }, [cotizaciones])
+
+  const estatusDisponibles = useMemo(() => {
+    return Array.from(
+      new Set(
+        cotizaciones
+          .map((cotizacion) => cotizacion.estado)
+          .filter(Boolean)
+      )
+    )
+  }, [cotizaciones])
 
   const cotizacionesFiltradas = useMemo(() => {
     const search = busqueda.trim().toLowerCase()
 
-    return cotizacionesMock.filter((cotizacion) => {
+    return cotizaciones.filter((cotizacion) => {
       const matchesSearch =
         !search ||
         cotizacion.nombreCampana.toLowerCase().includes(search) ||
         cotizacion.cliente.toLowerCase().includes(search)
 
       const matchesUser =
-        !usuarioSeleccionado || cotizacion.usuarioCreadorId === usuarioSeleccionado
+        !usuarioSeleccionado || String(cotizacion.usuarioCreadorId) === String(usuarioSeleccionado)
 
-      return matchesSearch && matchesUser
+      const matchesStatus =
+        !estatusSeleccionado || cotizacion.estado === estatusSeleccionado
+
+      return matchesSearch && matchesUser && matchesStatus
     })
-  }, [busqueda, usuarioSeleccionado])
+  }, [busqueda, cotizaciones, estatusSeleccionado, usuarioSeleccionado])
+
+  const filtrosActivos = Boolean(busqueda.trim() || usuarioSeleccionado || estatusSeleccionado)
 
   return (
     <div className="space-y-8">
@@ -51,7 +103,7 @@ export default function HistorialCotizaciones() {
               Historial de Cotizaciones
             </h2>
             <p className="text-base leading-8 text-slate-600">
-              Explora propuestas anteriores, identifica al creador responsable y abre directamente
+              Explora propuestas guardadas en backend, identifica al creador responsable y abre directamente
               los flujos de tratamiento o visualizacion para cliente.
             </p>
           </div>
@@ -59,7 +111,7 @@ export default function HistorialCotizaciones() {
           <Tarjeta className="min-w-[240px] bg-white/80 text-right">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Resultados</p>
             <p className="mt-2 text-3xl font-semibold text-slate-950">
-              {cotizacionesFiltradas.length}
+              {cargando ? '...' : cotizacionesFiltradas.length}
             </p>
           </Tarjeta>
         </div>
@@ -68,22 +120,52 @@ export default function HistorialCotizaciones() {
       <FiltrosCotizaciones
         busqueda={busqueda}
         usuarioSeleccionado={usuarioSeleccionado}
+        estatusSeleccionado={estatusSeleccionado}
         usuarios={usuarios}
+        estatusDisponibles={estatusDisponibles}
         onBusquedaChange={(event) => setBusqueda(event.target.value)}
         onUsuarioChange={(event) => setUsuarioSeleccionado(event.target.value)}
+        onEstatusChange={(event) => setEstatusSeleccionado(event.target.value)}
       />
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        {cotizacionesFiltradas.map((cotizacion) => (
-          <TarjetaCotizacion key={cotizacion.id} cotizacion={cotizacion} />
-        ))}
-      </section>
-
-      {cotizacionesFiltradas.length === 0 && (
+      {cargando && (
         <Tarjeta className="text-center">
-          <p className="text-lg font-medium text-slate-900">No hay cotizaciones que coincidan.</p>
+          <p className="text-lg font-medium text-slate-900">Cargando cotizaciones...</p>
           <p className="mt-2 text-sm text-slate-500">
-            Ajusta la busqueda o libera el filtro por usuario para ampliar el resultado.
+            Consultando GET /cotizaciones.php para recuperar el historial real.
+          </p>
+        </Tarjeta>
+      )}
+
+      {!cargando && error && (
+        <Tarjeta className="space-y-4 text-center">
+          <p className="text-lg font-medium text-slate-900">No fue posible cargar el historial.</p>
+          <p className="text-sm text-rose-700">{error}</p>
+          <div className="flex justify-center">
+            <Boton onClick={() => window.location.reload()}>
+              Reintentar
+            </Boton>
+          </div>
+        </Tarjeta>
+      )}
+
+      {!cargando && !error && cotizacionesFiltradas.length > 0 && (
+        <section className="grid gap-6 xl:grid-cols-2">
+          {cotizacionesFiltradas.map((cotizacion) => (
+            <TarjetaCotizacion key={cotizacion.id} cotizacion={cotizacion} />
+          ))}
+        </section>
+      )}
+
+      {!cargando && !error && cotizacionesFiltradas.length === 0 && (
+        <Tarjeta className="text-center">
+          <p className="text-lg font-medium text-slate-900">
+            {filtrosActivos ? 'No hay cotizaciones que coincidan.' : 'No hay cotizaciones guardadas todavia.'}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            {filtrosActivos
+              ? 'Ajusta la busqueda o libera los filtros para ampliar el resultado.'
+              : 'Cuando se guarde una cotizacion real desde Nueva Cotizacion aparecera aqui.'}
           </p>
         </Tarjeta>
       )}

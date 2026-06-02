@@ -2,179 +2,203 @@
 
 ## Objetivo
 
-Este documento resume los endpoints que el frontend espera consumir desde una API PHP 8 externa. Ninguno de estos endpoints forma parte del repositorio React actual.
+Este documento resume los endpoints que el frontend consume o espera consumir desde una API PHP 8 externa. Ninguno de estos endpoints forma parte del repositorio React actual.
 
 ## Base URL
 
 Todas las peticiones parten de:
 
 - `VITE_API_BASE_URL`
-- fallback local de desarrollo: `/api`
+- fallback local: `/api`
 
-Ejemplo:
-
-```env
-VITE_API_BASE_URL=https://tu-dominio.com/api
-```
-
-## Nota sobre autenticacion mock
-
-Durante desarrollo puede usarse:
+Configuracion recomendada:
 
 ```env
-VITE_AUTH_MOCK=true
+VITE_API_BASE_URL=https://www.ntpmedia.com.mx/Dooh/dooh_api
+VITE_AUTH_MOCK=false
 ```
 
-Con esta bandera:
+## Autenticacion
 
-- el login funciona en modo frontend controlado
-- no se usan credenciales reales
-- la sesion simulada solo sirve para navegar
-- debe desactivarse en produccion
+### Modo mock
 
-## Flujo temporal actual del parser
+`VITE_AUTH_MOCK` solo activa el modo mock cuando su valor es exactamente `true`.
 
-Mientras no exista persistencia real:
+Si vale `false` o no existe:
 
-1. El parser procesa el archivo en frontend.
-2. El resultado se convierte en una `cotizacionTemporal`.
-3. Esa cotizacion se guarda en `sessionStorage` bajo la clave `dooh_cotizacion_temporal`.
-4. La pantalla de tratamiento consume ese estado temporal.
+- el frontend usa autenticacion real
+- no se crean usuarios mock
+- no se generan tokens fake
 
-Este mecanismo sera reemplazado por la API PHP 8 externa.
-
-## Endpoints esperados por modulo
-
-### Autenticacion
-
-Endpoints futuros esperados:
+### Endpoints reales
 
 - `POST /login.php`
-- `POST /logout.php`
 - `GET /session.php`
+- `POST /logout.php`
+- `GET /health.php`
 
-Payload esperado para login:
+### Login
+
+Request:
 
 ```json
 {
-  "usuario": "operaciones.ntp",
+  "usuario": "elena@ntpmedia.com.mx",
   "password": "********"
 }
 ```
 
-Respuesta esperada de sesion:
+Respuesta esperada:
 
 ```json
 {
   "ok": true,
+  "mensaje": "Inicio de sesion correcto",
+  "token": "jwt-o-token-equivalente",
+  "expiraEn": "2026-06-01 18:00:00",
   "usuario": {
-    "id": "usr-01",
-    "nombre": "Mariana Torres",
-    "rol": "Operaciones",
-    "area": "NTP Media"
-  },
-  "token": "jwt-o-token-equivalente"
+    "id": 1,
+    "nombre": "Elena",
+    "correo": "elena@ntpmedia.com.mx",
+    "rol": "editor",
+    "estaActivo": true,
+    "ultimoAcceso": "2026-06-01 10:00:00"
+  }
 }
 ```
 
-### Cotizaciones
+Comportamiento del frontend:
 
-Endpoints futuros esperados:
+- guarda el token en `localStorage` con la clave `dooh_auth_token`
+- guarda el usuario en `localStorage` con la clave `dooh_auth_user`
+- envia `Authorization: Bearer <token>` en llamadas autenticadas
+- si el login falla, no guarda token ni usuario
 
-- `GET /quotations.php`
-- `GET /quotation.php?id=:id`
-- `POST /quotations.php`
-- `PUT /quotation.php?id=:id`
+## Cotizaciones
 
-Campos operativos esperados por cotizacion:
+### GET `/cotizaciones.php`
 
-| Campo | Tipo |
-| --- | --- |
-| `id` | string |
-| `nombreCampana` | string |
-| `cliente` | string |
-| `nombreArchivo` | string |
-| `nombreHoja` | string |
-| `fechaCreacion` | string |
-| `estado` | string |
-| `totalPantallas` | number |
-| `totalPantallasActivas` | number |
-| `columnas` | array |
-| `ubicaciones` | array |
-
-Campos esperados por cada ubicacion parseada:
-
-| Campo | Tipo |
-| --- | --- |
-| `idTemporal` | string |
-| `campaignName` | string |
-| `cliente` | string |
-| `sheetName` | string |
-| `screenName` | string |
-| `city` | string |
-| `venueType` | string |
-| `latitude` | number or null |
-| `longitude` | number or null |
-| `dimensions` | string |
-| `impressions` | number |
-| `cardinalPoint` | string |
-| `isValid` | boolean |
-| `is_active` | boolean |
-| `errors` | string[] |
-| `rawPayload` | object |
-
-Notas del parser:
-
-- el frontend intenta detectar primero `Inventory - Screens`
-- si no existe, busca variantes como `Inventory`, `Screens`, `Inventory Screens`, `Inventory-Screens`, `Inventario` y `Pantallas`
-- la columna `Maps` se elimina automaticamente antes de formar el payload
-
-### Usuarios
-
-Endpoint futuro esperado:
-
-- `GET /users.php`
-
-Campos esperados por usuario:
-
-| Campo | Tipo |
-| --- | --- |
-| `id` | string |
-| `nombre` | string |
-| `area` | string |
-| `rol` | string |
-| `estadoCredenciales` | string |
-| `ultimoAcceso` | string |
-| `totalCotizacionesCreadas` | number |
-
-### Locations
-
-Endpoints actualmente preparados por `src/services/locationsApi.js`:
-
-- `POST /save_locations.php`
-- `GET /get_locations.php`
-- `GET /get_campaign.php?id=:campaignId`
-- `DELETE /delete_location.php?id=:locationId`
-
-Payload esperado para guardar locations:
+Respuesta observada:
 
 ```json
 {
-  "locations": [
+  "ok": true,
+  "cotizaciones": [],
+  "total": 0,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Filtros soportados por frontend:
+
+- `q`
+- `usuarioId`
+- `estatus`
+- `limit`
+- `offset`
+
+### GET `/cotizacion.php?id=:id`
+
+- requiere `Authorization: Bearer TOKEN`
+- cuando no existe devuelve `404` con `mensaje`
+
+El frontend normaliza tanto `ubicaciones` como `pantallas` si el backend usa cualquiera de esos nombres.
+
+### POST `/cotizaciones.php`
+
+Payload que envia el frontend:
+
+```json
+{
+  "nombreCampana": "Campana Q2 2026",
+  "cliente": "Cliente Demo",
+  "nombreArchivo": "inventario.xlsx",
+  "nombreHoja": "Inventory - Screens",
+  "notasInternas": "Observaciones operativas",
+  "diagnostico": {},
+  "resumen": {},
+  "columnas": [],
+  "ubicaciones": [],
+  "pantallas": [],
+  "cotizacionTemporal": {
+    "nombreCampana": "Campana Q2 2026",
+    "cliente": "Cliente Demo",
+    "nombreArchivo": "inventario.xlsx",
+    "nombreHoja": "Inventory - Screens",
+    "columnas": [],
+    "ubicaciones": []
+  }
+}
+```
+
+Notas:
+
+- el frontend envia `ubicaciones` y `pantallas` para tolerar contratos equivalentes
+- si la API responde con `cotizacionId`, `id` o `cotizacion.id`, el frontend navega a `/cotizaciones/{id}/tratamiento`
+- si la API falla, no navega ni guarda como definitivo en `sessionStorage`
+
+### PUT `/cotizacion.php?id=:id`
+
+El frontend reenvia la misma cotizacion, con sus `ubicaciones` actualizadas, sobre el mismo `cotizacion_id`.
+
+Objetivo:
+
+- no crear una nueva cotizacion por cada edicion
+- conservar el mismo `cotizacion_id`
+
+### DELETE `/cotizacion.php?id=:id`
+
+Preparado para archivar cotizaciones desde servicio. La UI actual prioriza la edicion por `PUT`.
+
+## Usuarios
+
+### GET `/usuarios.php`
+
+Respuesta observada:
+
+```json
+{
+  "ok": true,
+  "usuarios": [
     {
-      "campaignName": "Campana Q2 2026",
-      "screenName": "Pantalla Centro",
-      "city": "Madrid",
-      "venueType": "Street",
-      "latitude": 40.4168,
-      "longitude": -3.7038,
-      "cardinalPoint": "Centro",
-      "dimensions": "1920x1080",
-      "impressions": 15000
+      "id": 3,
+      "nombre": "Administrador",
+      "correo": "admin@ntpmedia.com.mx",
+      "area": "",
+      "rol": "administrador",
+      "estaActivo": true,
+      "estadoCredenciales": "Activo",
+      "ultimoAcceso": "2026-06-01 14:06:58",
+      "totalCotizacionesCreadas": 0
     }
   ]
 }
 ```
+
+### POST `/usuarios.php`
+
+El servicio frontend ya esta preparado para enviar altas de usuarios aunque la UI actual solo consume listado.
+
+## Pantallas
+
+El backend tambien expone:
+
+- `PUT /pantalla.php?id=:id`
+- `DELETE /pantalla.php?id=:id`
+
+La integracion actual del frontend actualiza pantallas en bloque mediante `PUT /cotizacion.php?id=:id` para mantener consistente el estado de una misma cotizacion.
+
+## Flujo temporal del parser
+
+Mientras `VITE_AUTH_MOCK=true`:
+
+1. El parser procesa el archivo en frontend.
+2. El resultado se convierte en una `cotizacionTemporal`.
+3. Esa cotizacion puede guardarse en `sessionStorage` bajo la clave `dooh_cotizacion_temporal`.
+4. La pantalla de tratamiento puede consumir ese respaldo temporal.
+
+Con `VITE_AUTH_MOCK=false`, ese respaldo deja de ser el flujo principal.
 
 ## Reglas de integracion
 
@@ -182,3 +206,30 @@ Payload esperado para guardar locations:
 - si la API vive en otro dominio, debe habilitar CORS
 - si cambian nombres de rutas o payloads, deben ajustarse los servicios frontend
 - no hay backend PHP dentro de este repositorio
+
+## 2026-06-01 - Persistencia real de cotizaciones
+
+### Agregado
+
+- Integracion con GET /cotizaciones.php.
+- Integracion con POST /cotizaciones.php.
+- Integracion con GET /cotizacion.php?id=.
+- Integracion con PUT /cotizacion.php?id=.
+- Integracion con GET /usuarios.php.
+- Nueva Cotizacion guarda en MySQL mediante API externa.
+- Historial muestra cotizaciones reales.
+- Tratamiento consume cotizacion real desde backend.
+- Usuarios del sistema consume usuarios reales.
+
+### Modificado
+
+- sessionStorage deja de ser el flujo principal de guardado.
+- Mocks de cotizaciones y usuarios quedan solo como respaldo de desarrollo.
+- Grilla de tratamiento trabaja con cotizacion_id real.
+
+### Restricciones respetadas
+
+- Sin backend dentro del repositorio.
+- Sin SQL.
+- Sin tablas fisicas por cotizacion.
+- Sin crear una cotizacion nueva por cada edicion.

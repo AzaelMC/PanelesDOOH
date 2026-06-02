@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AUTH_MOCK_ENABLED } from '../../../config/env'
 import Boton from '../../../components/ui/Boton'
 import CampoTexto from '../../../components/ui/CampoTexto'
 import Tarjeta from '../../../components/ui/Tarjeta'
@@ -11,12 +12,14 @@ import SelectorHoja from '../../excel-import/components/SelectorHoja'
 import TablaVistaUbicaciones from '../../excel-import/components/TablaVistaUbicaciones'
 import VistaColumnas from '../../excel-import/components/VistaColumnas'
 import { useAnalizadorExcel } from '../../excel-import/hooks/useAnalizadorExcel'
+import { crearCotizacion } from '../services/cotizacionesApi'
 
 const STORAGE_KEY = 'dooh_cotizacion_temporal'
 
 export default function NuevaCotizacion() {
   const navigate = useNavigate()
   const [errorFormulario, setErrorFormulario] = useState('')
+  const [guardando, setGuardando] = useState(false)
   const [formData, setFormData] = useState({
     nombreCampana: '',
     cliente: '',
@@ -47,7 +50,8 @@ export default function NuevaCotizacion() {
     formData.nombreCampana.trim() &&
     formData.cliente.trim() &&
     ubicacionesValidas.length > 0 &&
-    !cargando
+    !cargando &&
+    !guardando
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -61,7 +65,7 @@ export default function NuevaCotizacion() {
     }
   }
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!puedeContinuar) {
       setErrorFormulario('Completa campana, cliente y aseguremos al menos una ubicacion valida.')
       return
@@ -75,14 +79,32 @@ export default function NuevaCotizacion() {
 
       const cotizacionTemporal = {
         ...resultado.cotizacionTemporal,
-        notasInternas: formData.notasInternas.trim()
+        notasInternas: formData.notasInternas.trim(),
+        diagnostico: resultado.diagnostico
       }
 
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(cotizacionTemporal))
-      navigate(`/cotizaciones/${cotizacionTemporal.id}/tratamiento`)
+      if (AUTH_MOCK_ENABLED) {
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(cotizacionTemporal))
+        navigate(`/cotizaciones/${cotizacionTemporal.id}/tratamiento`)
+        return
+      }
+
+      setGuardando(true)
+
+      const response = await crearCotizacion(cotizacionTemporal)
+      const cotizacionId = response.cotizacionId || response.cotizacion?.id
+
+      if (!cotizacionId) {
+        throw new Error('La API no devolvio un cotizacionId valido.')
+      }
+
+      window.sessionStorage.removeItem(STORAGE_KEY)
+      navigate(`/cotizaciones/${cotizacionId}/tratamiento`)
     } catch (prepareError) {
-      console.error('[Nueva Cotizacion] Error preparando cotizacion temporal', prepareError)
-      setErrorFormulario(prepareError.message || 'No fue posible preparar la cotizacion temporal.')
+      console.error('[Nueva Cotizacion] Error preparando o guardando la cotizacion', prepareError)
+      setErrorFormulario(prepareError.message || 'No fue posible guardar la cotizacion.')
+    } finally {
+      setGuardando(false)
     }
   }
 
@@ -97,7 +119,7 @@ export default function NuevaCotizacion() {
         </h2>
         <p className="text-base leading-8 text-slate-600">
           El parser se ejecuta completamente en el navegador, detecta la hoja de inventario,
-          localiza encabezados y prepara una cotizacion temporal antes de pasar al tratamiento.
+          localiza encabezados y ahora guarda la cotizacion real en la API antes de pasar al tratamiento.
         </p>
       </section>
 
@@ -107,17 +129,17 @@ export default function NuevaCotizacion() {
             <div className="space-y-2">
               <h3 className="text-xl font-semibold text-slate-950">Carga inicial del archivo</h3>
               <p className="text-sm text-slate-500">
-                Se soportan archivos `.xlsx`, `.xls` y `.csv`. El analisis es local y no envia datos a backend.
+                Se soportan archivos `.xlsx`, `.xls` y `.csv`. El analisis es local y solo se envia a backend al confirmar la cotizacion.
               </p>
             </div>
 
-            <CajaCargaExcel onFileSelect={manejarArchivo} disabled={cargando} />
+            <CajaCargaExcel onFileSelect={manejarArchivo} disabled={cargando || guardando} />
 
             <div className="flex flex-wrap gap-3">
               <Boton
                 variant="secondary"
                 onClick={reiniciarAnalizador}
-                disabled={!nombreArchivo || cargando}
+                disabled={!nombreArchivo || cargando || guardando}
               >
                 Limpiar archivo
               </Boton>
@@ -165,7 +187,7 @@ export default function NuevaCotizacion() {
             <div className="space-y-2">
               <h3 className="text-xl font-semibold text-slate-950">Datos preliminares</h3>
               <p className="text-sm text-slate-500">
-                Se incorporaran a la cotizacion temporal junto con el archivo ya analizado.
+                Se incorporaran a la cotizacion real junto con el archivo ya analizado.
               </p>
             </div>
 
@@ -201,7 +223,7 @@ export default function NuevaCotizacion() {
               </div>
             )}
 
-            <Boton size="lg" onClick={handleContinue} disabled={!puedeContinuar}>
+            <Boton size="lg" onClick={handleContinue} disabled={!puedeContinuar} loading={guardando}>
               Continuar a tratamiento
             </Boton>
           </Tarjeta>

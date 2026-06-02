@@ -6,7 +6,7 @@ const enlaces = [
   { to: '/panel', label: 'Panel' },
   { to: '/cotizaciones/nueva', label: 'Nueva cotizacion' },
   { to: '/cotizaciones/historial', label: 'Historial' },
-  { to: '/usuarios', label: 'Usuarios' }
+  { to: '/usuarios', label: 'Usuarios', soloAdministrador: true }
 ]
 
 function linkClasses({ isActive }) {
@@ -20,6 +20,10 @@ function linkClasses({ isActive }) {
 export default function Encabezado() {
   const navigate = useNavigate()
   const { usuario, cerrarSesion } = useAutenticacion()
+
+  const enlacesVisibles = enlaces.filter((enlace) => (
+    !enlace.soloAdministrador || usuario?.rol === 'administrador'
+  ))
 
   const handleCerrarSesion = async () => {
     await cerrarSesion()
@@ -43,7 +47,7 @@ export default function Encabezado() {
 
         <div className="flex flex-1 flex-col gap-4 lg:items-end">
           <nav className="flex flex-wrap items-center gap-2">
-            {enlaces.map((enlace) => (
+            {enlacesVisibles.map((enlace) => (
               <NavLink key={enlace.to} to={enlace.to} className={linkClasses}>
                 {enlace.label}
               </NavLink>

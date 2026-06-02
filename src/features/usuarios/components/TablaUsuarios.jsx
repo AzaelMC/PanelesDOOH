@@ -2,11 +2,13 @@ import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
 
 function getStatusVariant(status) {
-  if (status === 'Vigentes') {
+  const normalized = String(status || '').toLowerCase()
+
+  if (normalized === 'activo' || normalized === 'vigentes' || normalized === 'vigente') {
     return 'success'
   }
 
-  if (status === 'Pendientes') {
+  if (normalized === 'pendientes' || normalized === 'pendiente') {
     return 'warning'
   }
 
@@ -14,13 +16,23 @@ function getStatusVariant(status) {
 }
 
 function formatDate(date) {
+  if (!date) {
+    return '-'
+  }
+
+  const parsed = new Date(date)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date
+  }
+
   return new Intl.DateTimeFormat('es-MX', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
-  }).format(new Date(date))
+  }).format(parsed)
 }
 
 export default function TablaUsuarios({ usuarios }) {
@@ -31,7 +43,7 @@ export default function TablaUsuarios({ usuarios }) {
           <thead className="bg-slate-50">
             <tr className="text-xs uppercase tracking-[0.22em] text-slate-500">
               <th className="px-6 py-4">Nombre</th>
-              <th className="px-6 py-4">Area</th>
+              <th className="px-6 py-4">Correo</th>
               <th className="px-6 py-4">Rol</th>
               <th className="px-6 py-4">Credenciales</th>
               <th className="px-6 py-4">Ultimo acceso</th>
@@ -43,9 +55,12 @@ export default function TablaUsuarios({ usuarios }) {
               <tr key={usuario.id} className="align-top">
                 <td className="px-6 py-5">
                   <p className="font-semibold text-slate-900">{usuario.nombre}</p>
+                  {usuario.area && (
+                    <p className="mt-1 text-sm text-slate-500">{usuario.area}</p>
+                  )}
                 </td>
-                <td className="px-6 py-5 text-sm text-slate-600">{usuario.area}</td>
-                <td className="px-6 py-5 text-sm text-slate-600">{usuario.rol}</td>
+                <td className="px-6 py-5 text-sm text-slate-600">{usuario.correo || '-'}</td>
+                <td className="px-6 py-5 text-sm text-slate-600">{usuario.rol || '-'}</td>
                 <td className="px-6 py-5">
                   <EtiquetaEstado status={getStatusVariant(usuario.estadoCredenciales)}>
                     {usuario.estadoCredenciales}

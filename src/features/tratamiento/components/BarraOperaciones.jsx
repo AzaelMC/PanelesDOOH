@@ -11,7 +11,7 @@ const operaciones = [
   { value: 'porcentaje', label: 'Porcentaje' }
 ]
 
-export default function BarraOperaciones({ columnasNumericas = [], onAplicarOperacion }) {
+export default function BarraOperaciones({ columnasNumericas = [], onAplicarOperacion, disabled = false }) {
   const [formData, setFormData] = useState({
     columnaOrigen: '',
     operacion: 'suma',
@@ -39,6 +39,10 @@ export default function BarraOperaciones({ columnasNumericas = [], onAplicarOper
   }
 
   const handleApply = () => {
+    if (disabled) {
+      return
+    }
+
     if (!columnaOrigenActual || !formData.columnaResultado.trim() || formData.valor === '') {
       setError('Completa columna origen, valor y nombre de resultado.')
       return
@@ -66,6 +70,7 @@ export default function BarraOperaciones({ columnasNumericas = [], onAplicarOper
           name="columnaOrigen"
           value={columnaOrigenActual}
           onChange={handleChange}
+          disabled={disabled}
         >
           {columnasNumericas.map((columna) => (
             <option key={columna.key} value={columna.key}>
@@ -80,6 +85,7 @@ export default function BarraOperaciones({ columnasNumericas = [], onAplicarOper
           name="operacion"
           value={formData.operacion}
           onChange={handleChange}
+          disabled={disabled}
         >
           {operaciones.map((operacion) => (
             <option key={operacion.value} value={operacion.value}>
@@ -95,6 +101,7 @@ export default function BarraOperaciones({ columnasNumericas = [], onAplicarOper
           value={formData.valor}
           onChange={handleChange}
           placeholder="10"
+          disabled={disabled}
         />
 
         <CampoTexto
@@ -103,10 +110,13 @@ export default function BarraOperaciones({ columnasNumericas = [], onAplicarOper
           value={formData.columnaResultado}
           onChange={handleChange}
           placeholder="Ej. impressions_ajustadas"
+          disabled={disabled}
         />
 
         <div className="flex items-end">
-          <Boton onClick={handleApply}>Aplicar operacion</Boton>
+          <Boton onClick={handleApply} disabled={disabled || columnasNumericas.length === 0}>
+            Aplicar operacion
+          </Boton>
         </div>
       </div>
 
@@ -116,6 +126,7 @@ export default function BarraOperaciones({ columnasNumericas = [], onAplicarOper
           name="aplicarInactivas"
           checked={formData.aplicarInactivas}
           onChange={handleChange}
+          disabled={disabled}
           className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
         />
         Aplicar tambien a pantallas inactivas

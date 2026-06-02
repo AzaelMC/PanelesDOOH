@@ -42,7 +42,14 @@ export function ProveedorAutenticacion({ children }) {
 
   const iniciarSesion = async (credentials) => {
     const session = await iniciarSesionApi(credentials)
-    setUsuario(session?.usuario || null)
+    const nextUsuario = session?.usuario || null
+
+    if (!nextUsuario) {
+      setUsuario(null)
+      throw new Error('No fue posible recuperar la sesion del usuario.')
+    }
+
+    setUsuario(nextUsuario)
     return session
   }
 

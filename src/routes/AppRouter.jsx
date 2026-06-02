@@ -37,8 +37,16 @@ export default function AppRouter() {
           path="/cotizaciones/:cotizacionId/mapa"
           element={<VistaMapaCliente />}
         />
-        <Route path="/usuarios" element={<UsuariosSistema />} />
       </Route>
+
+      <Route
+        path="/usuarios"
+        element={(
+          <RutaPrivada rolesPermitidos={['administrador']}>
+            <UsuariosSistema />
+          </RutaPrivada>
+        )}
+      />
 
       <Route path="*" element={<RedireccionRaiz />} />
     </Routes>

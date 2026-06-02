@@ -76,7 +76,7 @@ export default function LienzoMapaPlaceholder({
                   {pantallaSeleccionada.screenName}
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
-                  {pantallaSeleccionada.city} · {pantallaSeleccionada.venueType}
+                  {pantallaSeleccionada.city} / {pantallaSeleccionada.venueType}
                 </p>
               </div>
 
@@ -88,7 +88,7 @@ export default function LienzoMapaPlaceholder({
             </div>
           ) : (
             <p className="text-sm text-slate-600">
-              Selecciona una pantalla desde el listado o desde un marcador mock para inspeccionar su contexto.
+              Selecciona una pantalla desde el listado o desde un marcador para inspeccionar su contexto.
             </p>
           )}
         </div>

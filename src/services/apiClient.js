@@ -1,11 +1,29 @@
 import { API_BASE_URL } from '../config/env'
 
+const AUTH_TOKEN_STORAGE_KEY = 'dooh_auth_token'
+
+function getBackendMessage(payload, fallbackMessage) {
+  if (payload && typeof payload === 'object') {
+    return payload.mensaje || payload.message || payload.error || fallbackMessage
+  }
+
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload
+  }
+
+  return fallbackMessage
+}
+
 /**
  * Cliente HTTP base para hacer peticiones a la API externa.
  */
 class ApiClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL
+  }
+
+  getToken() {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
   }
 
   async parseResponse(response) {
@@ -24,20 +42,29 @@ class ApiClient {
   }
 
   async request(endpoint, options = {}) {
+    const token = this.getToken()
+
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, {
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(options.headers || {})
         },
         ...options
       })
 
+      const payload = await this.parseResponse(response)
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        throw new Error(getBackendMessage(payload, `HTTP ${response.status}`))
       }
 
-      return await this.parseResponse(response)
+      if (payload && typeof payload === 'object' && payload.ok === false) {
+        throw new Error(getBackendMessage(payload, 'La API devolvio un error.'))
+      }
+
+      return payload
     } catch (error) {
       console.error(`HTTP ${options.method || 'GET'} ${endpoint}:`, error)
       throw error

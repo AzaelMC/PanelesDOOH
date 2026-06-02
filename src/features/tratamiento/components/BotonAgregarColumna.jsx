@@ -12,12 +12,20 @@ function normalizarLlave(valor) {
     .replace(/\s+/g, '_')
 }
 
-export default function BotonAgregarColumna({ columnasExistentes = [], onAgregarColumna }) {
+export default function BotonAgregarColumna({
+  columnasExistentes = [],
+  onAgregarColumna,
+  disabled = false
+}) {
   const [open, setOpen] = useState(false)
   const [nombreColumna, setNombreColumna] = useState('')
   const [error, setError] = useState('')
 
   const handleSubmit = () => {
+    if (disabled) {
+      return
+    }
+
     const nombreVisual = nombreColumna.trim()
     const key = normalizarLlave(nombreVisual)
 
@@ -58,15 +66,20 @@ export default function BotonAgregarColumna({ columnasExistentes = [], onAgregar
               setError('')
             }
           }}
+          disabled={disabled}
         />
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Boton variant="secondary" onClick={() => setOpen((current) => !current)}>
+        <Boton
+          variant="secondary"
+          onClick={() => setOpen((current) => !current)}
+          disabled={disabled}
+        >
           {open ? 'Cancelar' : 'Agregar columna'}
         </Boton>
         {open && (
-          <Boton onClick={handleSubmit}>
+          <Boton onClick={handleSubmit} disabled={disabled}>
             Confirmar columna
           </Boton>
         )}

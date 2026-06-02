@@ -34,29 +34,37 @@ export default function FormularioLogin({ onSubmit, error, loading, authMockEnab
         </p>
         {authMockEnabled && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-            Modo temporal de autenticacion mock habilitado para desarrollo. Debe desactivarse en produccion.
+            Modo temporal de autenticacion mock habilitado. Desactivalo para probar la API real.
           </div>
+        )}
+        {import.meta.env.DEV && (
+          <p className="text-xs text-slate-500">
+            Usa una cuenta autorizada del sistema.
+          </p>
         )}
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
         <CampoTexto
-          label="Usuario"
+          label="Correo"
           name="usuario"
-          placeholder="usuario.operaciones"
+          type="email"
+          placeholder="usuario@empresa.com"
           value={formData.usuario}
           onChange={handleChange}
           autoComplete="username"
+          required
         />
 
         <CampoTexto
-          label="Contrasena"
+          label="Contraseña"
           name="password"
           type="password"
-          placeholder="Ingresa tu contrasena"
+          placeholder="Ingresa tu contraseña"
           value={formData.password}
           onChange={handleChange}
           autoComplete="current-password"
+          required
         />
 
         {error && (
