@@ -8,6 +8,13 @@ export default function PanelListadoPantallas({
   seleccionarPantalla,
   onValidarEntorno
 }) {
+  const manejarTeclaPantalla = (event, pantallaId) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      seleccionarPantalla(pantallaId)
+    }
+  }
+
   return (
     <Tarjeta className="flex h-full flex-col gap-5 overflow-hidden">
       <div className="space-y-2">
@@ -22,11 +29,13 @@ export default function PanelListadoPantallas({
           const isSelected = pantalla.id === pantallaSeleccionadaId
 
           return (
-            <button
+            <div
               key={pantalla.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => seleccionarPantalla(pantalla.id)}
-              className={`w-full rounded-[24px] border p-4 text-left transition ${
+              onKeyDown={(event) => manejarTeclaPantalla(event, pantalla.id)}
+              className={`w-full cursor-pointer rounded-[24px] border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
                 isSelected
                   ? 'border-slate-950 bg-slate-950 text-white shadow-lg'
                   : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
@@ -63,7 +72,7 @@ export default function PanelListadoPantallas({
                   Validar entorno
                 </Boton>
               </div>
-            </button>
+            </div>
           )
         })}
       </div>
