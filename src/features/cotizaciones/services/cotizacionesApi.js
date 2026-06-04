@@ -18,6 +18,11 @@ const COLUMNAS_BASE = [
 const CAMPOS_RESERVADOS_PANTALLA = new Set([
   'id',
   'idTemporal',
+  'pantallaId',
+  'pantalla_id',
+  'cotizacionId',
+  'cotizacion_id',
+  'orden',
   'campaignName',
   'cliente',
   'sheetName',
@@ -31,10 +36,38 @@ const CAMPOS_RESERVADOS_PANTALLA = new Set([
   'cardinalPoint',
   'status',
   'isValid',
+  'esValida',
+  'es_valida',
   'is_active',
+  'estaActiva',
+  'esta_activa',
   'errors',
-  'rawPayload'
+  'rawPayload',
+  'fechaCreacion',
+  'fecha_creacion',
+  'fechaActualizacion',
+  'fecha_actualizacion'
 ])
+
+const COLUMNAS_API_LIGERAS = [
+  'screenName',
+  'city',
+  'venueType',
+  'latitude',
+  'longitude',
+  'dimensions',
+  'impressions',
+  'cardinalPoint'
+]
+
+const TAMANO_LOTE_COTIZACION = 50
+
+function removeControlCharacters(value = '') {
+  return Array.from(String(value)).filter((character) => {
+    const codePoint = character.charCodeAt(0)
+    return codePoint >= 32 && codePoint !== 127
+  }).join('')
+}
 
 function pickFirst(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== '')
@@ -114,6 +147,267 @@ function toBoolean(value, fallback = false) {
   }
 
   return fallback
+}
+
+export function limpiarTextoParaApi(value, { fallback = '', maxLength = 255 } = {}) {
+  if (value === null || value === undefined) {
+    return fallback
+  }
+
+  const sanitized = removeControlCharacters(value)
+    .replace(/[<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!sanitized) {
+    return fallback
+  }
+
+  return sanitized.slice(0, maxLength)
+}
+
+function getRawPayloadValue(rawPayload = {}, keys = []) {
+  return pickFirst(...keys.map((key) => rawPayload[key]))
+}
+
+function sanitizeErrorMessages(errors = []) {
+  return errors
+    .map((error) => limpiarTextoParaApi(error, { maxLength: 160 }))
+    .filter(Boolean)
+    .slice(0, 10)
+}
+
+function buildSafeDimensions(pantalla = {}, rawPayload = {}) {
+  const explicitDimensions = limpiarTextoParaApi(
+    pickFirst(
+      pantalla.dimensions,
+      getRawPayloadValue(rawPayload, ['Dimension.dimensionsWxH', 'Dimensions'])
+    ),
+    { maxLength: 120 }
+  )
+
+  if (explicitDimensions) {
+    return explicitDimensions
+  }
+
+  const width = limpiarTextoParaApi(
+    getRawPayloadValue(rawPayload, ['Screen width (px)', 'Screen width']),
+    { maxLength: 32 }
+  )
+  const height = limpiarTextoParaApi(
+    getRawPayloadValue(rawPayload, ['Screen height (px)', 'Screen height']),
+    { maxLength: 32 }
+  )
+
+  if (!width || !height) {
+    return ''
+  }
+
+  return limpiarTextoParaApi(`${width}x${height}`, { maxLength: 120 })
+}
+
+function buildSafeLocationIdentifier(pantalla = {}, rawPayload = {}, index = 0) {
+  return limpiarTextoParaApi(
+    pickFirst(
+      getRawPayloadValue(rawPayload, ['Unit ID', 'Screen ID']),
+      pantalla.idTemporal,
+      pantalla.id,
+      `ubicacion-${index + 1}`
+    ),
+    { maxLength: 120 }
+  )
+}
+
+function normalizarUbicacionParaApi(pantalla = {}, index = 0) {
+  const rawPayload = toObject(pickFirst(pantalla.rawPayload, pantalla.raw_payload, {}))
+  const latitude = toNullableNumber(
+    pickFirst(pantalla.latitude, getRawPayloadValue(rawPayload, ['Screen latitude', 'Latitude']))
+  )
+  const longitude = toNullableNumber(
+    pickFirst(pantalla.longitude, getRawPayloadValue(rawPayload, ['Screen longitude', 'Longitude']))
+  )
+  const sanitizedErrors = sanitizeErrorMessages(normalizeErrors(pantalla))
+  const cardinalPoint = limpiarTextoParaApi(
+    pickFirst(pantalla.cardinalPoint, getRawPayloadValue(rawPayload, ['Cardinal point']), ''),
+    { maxLength: 80 }
+  )
+  const isValid = toBoolean(
+    pickFirst(pantalla.isValid, pantalla.esValida, latitude !== null && longitude !== null && sanitizedErrors.length === 0),
+    latitude !== null && longitude !== null && sanitizedErrors.length === 0
+  )
+
+  return {
+    idTemporal: buildSafeLocationIdentifier(pantalla, rawPayload, index),
+    screenName: limpiarTextoParaApi(
+      pickFirst(pantalla.screenName, getRawPayloadValue(rawPayload, ['Screen name'])),
+      { maxLength: 255 }
+    ),
+    city: limpiarTextoParaApi(
+      pickFirst(pantalla.city, getRawPayloadValue(rawPayload, ['Site location (city)', 'City'])),
+      { maxLength: 255 }
+    ),
+    venueType: limpiarTextoParaApi(
+      pickFirst(pantalla.venueType, getRawPayloadValue(rawPayload, ['Venue type'])),
+      { maxLength: 255 }
+    ),
+    latitude,
+    longitude,
+    cardinalPoint: cardinalPoint === 'Sin definir' ? '' : cardinalPoint,
+    dimensions: buildSafeDimensions(pantalla, rawPayload),
+    impressions: toNumber(
+      pickFirst(pantalla.impressions, getRawPayloadValue(rawPayload, ['Screen max impressions capacity', 'Impressions'])),
+      0
+    ),
+    isValid,
+    is_active: toBoolean(pickFirst(pantalla.is_active, true), true),
+    errors: sanitizedErrors
+  }
+}
+
+function normalizarColumnasParaApi(columnas, ubicaciones = []) {
+  const columnasDisponibles = new Set()
+
+  toArray(columnas).forEach((columna) => {
+    const normalized = normalizeColumn(columna)
+    if (COLUMNAS_API_LIGERAS.includes(normalized.key)) {
+      columnasDisponibles.add(normalized.key)
+    }
+  })
+
+  if (columnasDisponibles.size === 0) {
+    COLUMNAS_API_LIGERAS.forEach((key) => {
+      if (ubicaciones.some((ubicacion) => Object.prototype.hasOwnProperty.call(ubicacion, key))) {
+        columnasDisponibles.add(key)
+      }
+    })
+  }
+
+  return Array.from(columnasDisponibles)
+}
+
+function normalizarResumenParaApi(cotizacion = {}, ubicaciones = []) {
+  const resumen = toObject(pickFirst(cotizacion.resumen, {}))
+  const totalValidas = ubicaciones.filter((ubicacion) => ubicacion.isValid).length
+  const totalInvalidas = ubicaciones.length - totalValidas
+
+  return {
+    totalPantallas: ubicaciones.length,
+    totalPantallasActivas: ubicaciones.filter((ubicacion) => ubicacion.is_active).length,
+    totalFilasProcesadas: toNumber(
+      pickFirst(resumen.totalFilasProcesadas, resumen.filasProcesadas, resumen.totalFilas, ubicaciones.length),
+      ubicaciones.length
+    ),
+    totalValidas: toNumber(pickFirst(resumen.totalValidas, resumen.filasValidas, totalValidas), totalValidas),
+    totalInvalidas: toNumber(pickFirst(resumen.totalInvalidas, resumen.filasInvalidas, totalInvalidas), totalInvalidas),
+    mapsEliminada: toBoolean(pickFirst(resumen.mapsEliminada, resumen.columnaMapsEliminada, false), false)
+  }
+}
+
+function normalizarDiagnosticoParaApi(cotizacion = {}, resumen = {}) {
+  const diagnostico = toObject(pickFirst(cotizacion.diagnostico, {}))
+
+  return {
+    hojaDetectada: limpiarTextoParaApi(
+      pickFirst(diagnostico.hojaDetectada, cotizacion.nombreHoja, ''),
+      { maxLength: 255 }
+    ),
+    filaEncabezados: toNumber(
+      pickFirst(diagnostico.filaEncabezados, diagnostico.indiceFila, -1),
+      -1
+    ),
+    totalFilasProcesadas: toNumber(pickFirst(diagnostico.totalFilasProcesadas, resumen.totalFilasProcesadas), resumen.totalFilasProcesadas || 0),
+    totalValidas: toNumber(pickFirst(diagnostico.totalValidas, resumen.totalValidas), resumen.totalValidas || 0),
+    totalInvalidas: toNumber(pickFirst(diagnostico.totalInvalidas, resumen.totalInvalidas), resumen.totalInvalidas || 0),
+    mapsEliminada: toBoolean(pickFirst(diagnostico.mapsEliminada, resumen.mapsEliminada, false), false)
+  }
+}
+
+function buildCotizacionPayloadDebugInfo(payload = {}) {
+  const body = JSON.stringify(payload)
+  const ubicaciones = toArray(payload.ubicaciones)
+  const firstLocation = ubicaciones[0] && typeof ubicaciones[0] === 'object' ? ubicaciones[0] : {}
+
+  return {
+    sizeKb: Number((new TextEncoder().encode(body).length / 1024).toFixed(2)),
+    totalUbicaciones: ubicaciones.length,
+    payloadKeys: Object.keys(payload),
+    firstLocationKeys: Object.keys(firstLocation),
+    hasRawPayload: ubicaciones.some((ubicacion) => Object.prototype.hasOwnProperty.call(ubicacion || {}, 'rawPayload')),
+    hasCotizacionTemporal: Object.prototype.hasOwnProperty.call(payload, 'cotizacionTemporal'),
+    hasPantallasDuplicadas: Object.prototype.hasOwnProperty.call(payload, 'pantallas'),
+    hasUbicaciones: Object.prototype.hasOwnProperty.call(payload, 'ubicaciones'),
+    hasWorkbook: Object.prototype.hasOwnProperty.call(payload, 'workbook'),
+    hasRowsOriginales:
+      Object.prototype.hasOwnProperty.call(payload, 'rows') ||
+      Object.prototype.hasOwnProperty.call(payload, 'filas')
+  }
+}
+
+function dividirEnLotes(items = [], batchSize = TAMANO_LOTE_COTIZACION) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return []
+  }
+
+  const safeBatchSize =
+    Number.isFinite(batchSize) && batchSize > 0
+      ? Math.max(1, Math.floor(batchSize))
+      : TAMANO_LOTE_COTIZACION
+  const lotes = []
+
+  for (let index = 0; index < items.length; index += safeBatchSize) {
+    lotes.push(items.slice(index, index + safeBatchSize))
+  }
+
+  return lotes
+}
+
+function logCotizacionBatchProgress({ cotizacionId, loteActual, totalLotes, pantallasEnLote }) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  console.info('[DOOH Cotizacion Batch]', {
+    cotizacionId,
+    loteActual,
+    totalLotes,
+    pantallasEnLote
+  })
+}
+
+function validarRespuestaLote(response, { cotizacionId, loteActual, pantallasEsperadas }) {
+  const responseCotizacionId = extractCotizacionId(response)
+
+  if (responseCotizacionId && String(responseCotizacionId) !== String(cotizacionId)) {
+    throw new Error(`El lote ${loteActual} regreso un cotizacionId distinto al esperado.`)
+  }
+
+  if (response?.recibidas !== undefined && toNumber(response.recibidas, pantallasEsperadas) !== pantallasEsperadas) {
+    throw new Error(`El lote ${loteActual} no reporto la cantidad esperada de pantallas recibidas.`)
+  }
+
+  if (response?.insertadas !== undefined && toNumber(response.insertadas, pantallasEsperadas) !== pantallasEsperadas) {
+    throw new Error(`El lote ${loteActual} no se guardo completo en la API.`)
+  }
+}
+
+export function normalizarPayloadCotizacionParaApi(cotizacion = {}) {
+  const ubicaciones = toArray(pickFirst(cotizacion.ubicaciones, cotizacion.pantallas, []))
+    .map((ubicacion, index) => normalizarUbicacionParaApi(ubicacion, index))
+  const resumen = normalizarResumenParaApi(cotizacion, ubicaciones)
+  const diagnostico = normalizarDiagnosticoParaApi(cotizacion, resumen)
+  const columnas = normalizarColumnasParaApi(cotizacion.columnas, ubicaciones)
+
+  return {
+    nombreCampana: limpiarTextoParaApi(pickFirst(cotizacion.nombreCampana, ''), { maxLength: 255 }),
+    cliente: limpiarTextoParaApi(pickFirst(cotizacion.cliente, ''), { maxLength: 255 }),
+    nombreArchivo: limpiarTextoParaApi(pickFirst(cotizacion.nombreArchivo, ''), { maxLength: 255 }),
+    nombreHoja: limpiarTextoParaApi(pickFirst(cotizacion.nombreHoja, ''), { maxLength: 255 }),
+    notasInternas: limpiarTextoParaApi(pickFirst(cotizacion.notasInternas, ''), { maxLength: 4000 }),
+    diagnostico,
+    resumen,
+    columnas,
+    ubicaciones
+  }
 }
 
 function buildQueryString(params = {}) {
@@ -402,6 +696,69 @@ function extractCotizacionId(rawBody = {}, fallbackDetail = null) {
   )
 }
 
+async function crearCotizacionPorLotes(serializedPayload = {}) {
+  const { ubicaciones = [], ...metadata } = serializedPayload
+  const inicioResponse = await apiClient.post('/cotizaciones_iniciar.php', metadata)
+  const cotizacionId = extractCotizacionId(inicioResponse)
+
+  if (!cotizacionId) {
+    throw new Error('La API no devolvio un cotizacionId valido al iniciar la cotizacion.')
+  }
+
+  const lotes = dividirEnLotes(ubicaciones, TAMANO_LOTE_COTIZACION)
+  const responsesLotes = []
+
+  for (let loteIndice = 0; loteIndice < lotes.length; loteIndice += 1) {
+    const pantallas = lotes[loteIndice]
+    const loteActual = loteIndice + 1
+
+    logCotizacionBatchProgress({
+      cotizacionId,
+      loteActual,
+      totalLotes: lotes.length,
+      pantallasEnLote: pantallas.length
+    })
+
+    const loteResponse = await apiClient.post('/pantallas_lote.php', {
+      cotizacionId,
+      loteIndice: loteActual,
+      totalLotes: lotes.length,
+      pantallas
+    })
+
+    validarRespuestaLote(loteResponse, {
+      cotizacionId,
+      loteActual,
+      pantallasEsperadas: pantallas.length
+    })
+
+    responsesLotes.push(loteResponse)
+  }
+
+  const finalizacionResponse = await apiClient.post('/cotizaciones_finalizar.php', {
+    cotizacionId
+  })
+  const cotizacion =
+    finalizacionResponse?.cotizacion ||
+    finalizacionResponse?.ubicaciones ||
+    finalizacionResponse?.pantallas ||
+    finalizacionResponse?.id
+      ? normalizeCotizacionDetalle(finalizacionResponse)
+      : null
+
+  return {
+    ok: finalizacionResponse?.ok ?? true,
+    mensaje: finalizacionResponse?.mensaje || 'Cotizacion creada correctamente.',
+    cotizacionId: extractCotizacionId(finalizacionResponse, cotizacion) || String(cotizacionId),
+    cotizacion,
+    raw: {
+      inicio: inicioResponse,
+      lotes: responsesLotes,
+      finalizacion: finalizacionResponse
+    }
+  }
+}
+
 function buildMockCotizacionDetalle(cotizacionId) {
   const cotizacionResumen =
     cotizacionesMock.find((item) => String(item.id) === String(cotizacionId)) || cotizacionesMock[0]
@@ -484,12 +841,16 @@ export async function obtenerCotizacion(id) {
 }
 
 export async function crearCotizacion(payload) {
-  const serializedPayload = construirPayloadCotizacion(payload)
+  const serializedPayload = normalizarPayloadCotizacionParaApi(payload)
+
+  if (import.meta.env.DEV) {
+    console.info('[DOOH Cotizacion Payload Debug]', buildCotizacionPayloadDebugInfo(serializedPayload))
+  }
 
   if (AUTH_MOCK_ENABLED) {
     const cotizacion = normalizeCotizacionDetalle({
       cotizacion: {
-        ...serializedPayload.cotizacionTemporal,
+        ...serializedPayload,
         id: pickFirst(payload.id, `cot-temp-${Date.now()}`),
         puedeEditar: true
       },
@@ -504,19 +865,7 @@ export async function crearCotizacion(payload) {
     }
   }
 
-  const response = await apiClient.post('/cotizaciones.php', serializedPayload)
-  const cotizacion =
-    response?.cotizacion || response?.ubicaciones || response?.pantallas || response?.id
-      ? normalizeCotizacionDetalle(response)
-      : null
-
-  return {
-    ok: response?.ok ?? true,
-    mensaje: response?.mensaje || 'Cotizacion creada correctamente.',
-    cotizacionId: extractCotizacionId(response, cotizacion),
-    cotizacion,
-    raw: response
-  }
+  return crearCotizacionPorLotes(serializedPayload)
 }
 
 export async function actualizarCotizacion(id, payload) {
