@@ -3,6 +3,9 @@ import Tarjeta from '../../../components/ui/Tarjeta'
 import { cargarGoogleMaps, tieneGoogleMapsApiKey } from '../../../services/googleMapsLoader'
 import { prepararPantallasMapa } from '../utils/prepararPantallasMapa'
 
+const ZOOM_MAXIMO_INICIAL = 13
+const ZOOM_SELECCION = 16
+
 const MAPA_INICIAL = {
   center: { lat: 23.6345, lng: -102.5528 },
   zoom: 5,
@@ -35,14 +38,34 @@ function formatearImpresiones(value) {
   return value.toLocaleString('es-MX')
 }
 
+function aplicarEstiloMarcador(markerData, selected, iconos) {
+  if (!markerData?.marker || !iconos) {
+    return
+  }
+
+  markerData.marker.setIcon(selected ? iconos.seleccionado : iconos.base)
+  markerData.marker.setZIndex(selected ? 20 : 10)
+  markerData.marker.setLabel({
+    text: markerData.pantalla.city?.slice(0, 2).toUpperCase() || 'DO',
+    color: selected ? '#ffffff' : '#0f172a',
+    fontSize: '11px',
+    fontWeight: '700'
+  })
+}
+
 export default function LienzoMapaPlaceholder({
   pantallas,
   pantallaSeleccionada,
-  seleccionarPantalla
+  seleccionarPantalla,
+  centrarSeleccion = false
 }) {
   const mapaRef = useRef(null)
   const instanciaMapaRef = useRef(null)
-  const marcadoresRef = useRef([])
+  const mapsRef = useRef(null)
+  const marcadoresRef = useRef(new Map())
+  const iconosRef = useRef(null)
+  const pantallaSeleccionadaAnteriorRef = useRef(null)
+  const [mapaListo, setMapaListo] = useState(false)
   const [estado, setEstado] = useState('idle')
   const [mensajeError, setMensajeError] = useState('')
 
@@ -75,7 +98,7 @@ export default function LienzoMapaPlaceholder({
   }, [pantallaSeleccionada])
 
   useEffect(() => {
-    if (mensajeConfiguracion || mensajeCoordenadas) {
+    if (mensajeConfiguracion) {
       return undefined
     }
 
@@ -92,51 +115,18 @@ export default function LienzoMapaPlaceholder({
           return
         }
 
+        mapsRef.current = maps
+
         if (!instanciaMapaRef.current) {
           instanciaMapaRef.current = new maps.Map(mapaRef.current, MAPA_INICIAL)
         }
 
-        marcadoresRef.current.forEach((marker) => marker.setMap(null))
-        marcadoresRef.current = []
-
-        const bounds = new maps.LatLngBounds()
-        const iconoBase = crearIconoMarcador('#334155')
-        const iconoSeleccionado = crearIconoMarcador('#0f172a')
-
-        pantallasValidas.forEach((pantalla) => {
-          bounds.extend(pantalla.latLng)
-
-          const isSelected = pantallaSeleccionada?.id === pantalla.id
-          const marker = new maps.Marker({
-            position: pantalla.latLng,
-            map: instanciaMapaRef.current,
-            title: pantalla.screenName,
-            icon: isSelected ? iconoSeleccionado : iconoBase,
-            zIndex: isSelected ? 20 : 10,
-            label: {
-              text: pantalla.city?.slice(0, 2).toUpperCase() || 'DO',
-              color: isSelected ? '#ffffff' : '#0f172a',
-              fontSize: '11px',
-              fontWeight: '700'
-            }
-          })
-
-          marker.addListener('click', () => seleccionarPantalla(pantalla.id))
-          marcadoresRef.current.push(marker)
-        })
-
-        if (pantallasValidas.length === 1) {
-          instanciaMapaRef.current.setCenter(pantallasValidas[0].latLng)
-          instanciaMapaRef.current.setZoom(15)
-        } else {
-          instanciaMapaRef.current.fitBounds(bounds, 72)
+        iconosRef.current = {
+          base: crearIconoMarcador('#334155'),
+          seleccionado: crearIconoMarcador('#0f172a')
         }
 
-        if (pantallaSeleccionadaPreparada) {
-          instanciaMapaRef.current.panTo(pantallaSeleccionadaPreparada.latLng)
-          instanciaMapaRef.current.setZoom(Math.max(instanciaMapaRef.current.getZoom() || 14, 14))
-        }
-
+        setMapaListo(true)
         setEstado('listo')
       } catch (error) {
         if (!cancelado) {
@@ -151,7 +141,114 @@ export default function LienzoMapaPlaceholder({
     return () => {
       cancelado = true
     }
-  }, [pantallasValidas, pantallaSeleccionada, pantallaSeleccionadaPreparada, seleccionarPantalla, mensajeConfiguracion, mensajeCoordenadas])
+  }, [mensajeConfiguracion])
+
+  useEffect(() => {
+    if (!mapaListo || !instanciaMapaRef.current || !mapsRef.current) {
+      return undefined
+    }
+
+    const map = instanciaMapaRef.current
+    const maps = mapsRef.current
+
+    marcadoresRef.current.forEach(({ marker }) => {
+      marker.setMap(null)
+    })
+    marcadoresRef.current.clear()
+    pantallaSeleccionadaAnteriorRef.current = null
+
+    if (pantallasValidas.length === 0) {
+      setEstado('listo')
+      return undefined
+    }
+
+    setEstado('cargando')
+
+    const bounds = new maps.LatLngBounds()
+
+    pantallasValidas.forEach((pantalla) => {
+      bounds.extend(pantalla.latLng)
+
+      const marker = new maps.Marker({
+        position: pantalla.latLng,
+        map,
+        title: pantalla.screenName,
+        icon: iconosRef.current.base,
+        zIndex: 10,
+        label: {
+          text: pantalla.city?.slice(0, 2).toUpperCase() || 'DO',
+          color: '#0f172a',
+          fontSize: '11px',
+          fontWeight: '700'
+        }
+      })
+
+      marker.addListener('click', () => seleccionarPantalla(pantalla.id))
+
+      marcadoresRef.current.set(pantalla.id, {
+        marker,
+        pantalla
+      })
+    })
+
+    if (pantallasValidas.length === 1) {
+      map.setCenter(pantallasValidas[0].latLng)
+      map.setZoom(15)
+    } else {
+      map.fitBounds(bounds, 72)
+
+      maps.event.addListenerOnce(map, 'idle', () => {
+        if ((map.getZoom() || 0) > ZOOM_MAXIMO_INICIAL) {
+          map.setZoom(ZOOM_MAXIMO_INICIAL)
+        }
+      })
+    }
+
+    setEstado('listo')
+
+    return undefined
+  }, [mapaListo, pantallasValidas, seleccionarPantalla])
+
+  useEffect(() => {
+    if (!mapaListo || !instanciaMapaRef.current || !iconosRef.current) {
+      return
+    }
+
+    const markerAnteriorId = pantallaSeleccionadaAnteriorRef.current
+
+    if (markerAnteriorId && markerAnteriorId !== pantallaSeleccionadaPreparada?.id) {
+      aplicarEstiloMarcador(marcadoresRef.current.get(markerAnteriorId), false, iconosRef.current)
+    }
+
+    if (!pantallaSeleccionadaPreparada) {
+      pantallaSeleccionadaAnteriorRef.current = null
+      return
+    }
+
+    const markerActual = marcadoresRef.current.get(pantallaSeleccionadaPreparada.id)
+
+    if (!markerActual) {
+      pantallaSeleccionadaAnteriorRef.current = null
+      return
+    }
+
+    aplicarEstiloMarcador(markerActual, true, iconosRef.current)
+    pantallaSeleccionadaAnteriorRef.current = pantallaSeleccionadaPreparada.id
+
+    if (centrarSeleccion) {
+      instanciaMapaRef.current.panTo(pantallaSeleccionadaPreparada.latLng)
+      instanciaMapaRef.current.setZoom(ZOOM_SELECCION)
+    }
+  }, [mapaListo, pantallaSeleccionadaPreparada, centrarSeleccion])
+
+  useEffect(() => {
+    return () => {
+      marcadoresRef.current.forEach(({ marker }) => {
+        marker.setMap(null)
+      })
+      marcadoresRef.current.clear()
+    }
+  }, [])
 
   return (
     <Tarjeta className="flex h-full min-h-[620px] flex-col gap-5">

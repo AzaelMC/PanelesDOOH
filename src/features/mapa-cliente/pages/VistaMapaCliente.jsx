@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AUTH_MOCK_ENABLED } from '../../../config/env'
 import Boton from '../../../components/ui/Boton'
@@ -10,6 +10,40 @@ import LienzoMapaPlaceholder from '../components/LienzoMapaPlaceholder'
 import ModalStreetViewPlaceholder from '../components/ModalStreetViewPlaceholder'
 import PanelListadoPantallas from '../components/PanelListadoPantallas'
 import { pantallasMock } from '../data/pantallasMock'
+
+const cacheCotizacionesMapa = new Map()
+
+function obtenerCotizacionMapa(cotizacionId) {
+  const cacheKey = String(cotizacionId || '')
+
+  if (cacheCotizacionesMapa.has(cacheKey)) {
+    return cacheCotizacionesMapa.get(cacheKey)
+  }
+
+  const request = obtenerCotizacionPorId(cotizacionId).catch((error) => {
+    cacheCotizacionesMapa.delete(cacheKey)
+    throw error
+  })
+
+  cacheCotizacionesMapa.set(cacheKey, request)
+  return request
+}
+
+function useDebouncedValue(value, delay = 250) {
+  const [debouncedValue, setDebouncedValue] = useState(value)
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
 
 function buildMockSource(cotizacionId) {
   const cotizacion =
@@ -26,24 +60,39 @@ function buildMockSource(cotizacionId) {
 export default function VistaMapaCliente() {
   const { cotizacionId } = useParams()
   const [busqueda, setBusqueda] = useState('')
+  const busquedaDebounced = useDebouncedValue(busqueda, 250)
+
   const [pantallaSeleccionadaId, setPantallaSeleccionadaId] = useState(null)
+  const [centrarSeleccion, setCentrarSeleccion] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [cotizacion, setCotizacion] = useState(null)
   const [pantallas, setPantallas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const ultimaCotizacionSolicitadaRef = useRef(null)
 
   useEffect(() => {
     let active = true
+    const cotizacionKey = String(cotizacionId || '')
 
     async function cargarVista() {
+      if (!cotizacionKey) {
+        setCotizacion(null)
+        setPantallas([])
+        setPantallaSeleccionadaId(null)
+        setError('No se recibio el identificador de cotizacion.')
+        setCargando(false)
+        return
+      }
+
+      ultimaCotizacionSolicitadaRef.current = cotizacionKey
       setCargando(true)
       setError('')
 
       try {
-        const detalle = await obtenerCotizacionPorId(cotizacionId)
+        const detalle = await obtenerCotizacionMapa(cotizacionId)
 
-        if (!active) {
+        if (!active || ultimaCotizacionSolicitadaRef.current !== cotizacionKey) {
           return
         }
 
@@ -51,8 +100,9 @@ export default function VistaMapaCliente() {
         setCotizacion(detalle)
         setPantallas(pantallasActivas)
         setPantallaSeleccionadaId(pantallasActivas[0]?.id || null)
+        setCentrarSeleccion(false)
       } catch (loadError) {
-        if (!active) {
+        if (!active || ultimaCotizacionSolicitadaRef.current !== cotizacionKey) {
           return
         }
 
@@ -61,14 +111,16 @@ export default function VistaMapaCliente() {
           setCotizacion(source.cotizacion)
           setPantallas(source.pantallas)
           setPantallaSeleccionadaId(source.pantallas[0]?.id || null)
+          setCentrarSeleccion(false)
         } else {
           setCotizacion(null)
           setPantallas([])
           setPantallaSeleccionadaId(null)
+          setCentrarSeleccion(false)
           setError(loadError.message || 'No fue posible cargar la vista de mapa.')
         }
       } finally {
-        if (active) {
+        if (active && ultimaCotizacionSolicitadaRef.current === cotizacionKey) {
           setCargando(false)
         }
       }
@@ -81,8 +133,12 @@ export default function VistaMapaCliente() {
     }
   }, [cotizacionId])
 
+  useEffect(() => {
+    setCentrarSeleccion(false)
+  }, [busquedaDebounced])
+
   const pantallasFiltradas = useMemo(() => {
-    const search = busqueda.trim().toLowerCase()
+    const search = busquedaDebounced.trim().toLowerCase()
 
     return pantallas.filter((pantalla) => {
       if (!search) {
@@ -90,20 +146,32 @@ export default function VistaMapaCliente() {
       }
 
       return (
-        pantalla.screenName.toLowerCase().includes(search) ||
-        pantalla.city.toLowerCase().includes(search)
+        String(pantalla.screenName || '').toLowerCase().includes(search) ||
+        String(pantalla.city || '').toLowerCase().includes(search)
       )
     })
-  }, [pantallas, busqueda])
+  }, [pantallas, busquedaDebounced])
 
-  const pantallaSeleccionada =
-    pantallasFiltradas.find((pantalla) => pantalla.id === pantallaSeleccionadaId) ||
-    pantallasFiltradas[0] ||
-    null
+  const pantallaSeleccionada = useMemo(() => {
+    return (
+      pantallasFiltradas.find((pantalla) => pantalla.id === pantallaSeleccionadaId) ||
+      pantallasFiltradas[0] ||
+      null
+    )
+  }, [pantallasFiltradas, pantallaSeleccionadaId])
 
-  const seleccionarPantalla = (id) => {
+  const seleccionarPantalla = useCallback((id) => {
     setPantallaSeleccionadaId(id)
-  }
+    setCentrarSeleccion(true)
+  }, [])
+
+  const abrirValidacionEntorno = useCallback(() => {
+    setModalOpen(true)
+  }, [])
+
+  const cerrarValidacionEntorno = useCallback(() => {
+    setModalOpen(false)
+  }, [])
 
   if (cargando) {
     return (
@@ -176,7 +244,7 @@ export default function VistaMapaCliente() {
               pantallas={pantallasFiltradas}
               pantallaSeleccionadaId={pantallaSeleccionadaId}
               seleccionarPantalla={seleccionarPantalla}
-              onValidarEntorno={() => setModalOpen(true)}
+              onValidarEntorno={abrirValidacionEntorno}
             />
           </div>
 
@@ -184,6 +252,7 @@ export default function VistaMapaCliente() {
             pantallas={pantallasFiltradas}
             pantallaSeleccionada={pantallaSeleccionada}
             seleccionarPantalla={seleccionarPantalla}
+            centrarSeleccion={centrarSeleccion}
           />
         </div>
       )}
@@ -191,7 +260,7 @@ export default function VistaMapaCliente() {
       <ModalStreetViewPlaceholder
         open={modalOpen}
         pantalla={pantallaSeleccionada}
-        onClose={() => setModalOpen(false)}
+        onClose={cerrarValidacionEntorno}
       />
     </div>
   )
