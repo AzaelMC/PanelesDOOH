@@ -226,6 +226,12 @@ export default function NuevaCotizacion() {
             <Boton size="lg" onClick={handleContinue} disabled={!puedeContinuar} loading={guardando}>
               Continuar a tratamiento
             </Boton>
+
+            {guardando && (
+              <p className="text-sm text-slate-500">
+                Guardando pantallas por lotes...
+              </p>
+            )}
           </Tarjeta>
 
           {diagnostico.advertencias.length > 0 && (

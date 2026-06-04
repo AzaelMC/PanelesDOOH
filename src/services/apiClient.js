@@ -14,6 +14,30 @@ function getBackendMessage(payload, fallbackMessage) {
   return fallbackMessage
 }
 
+function stripTrailingSlash(value = '') {
+  return value.replace(/\/+$/, '')
+}
+
+function ensureLeadingSlash(value = '') {
+  return value.startsWith('/') ? value : `/${value}`
+}
+
+function buildRequestUrl(baseURL, endpoint) {
+  const normalizedBaseURL = stripTrailingSlash(baseURL)
+  const normalizedEndpoint = ensureLeadingSlash(endpoint)
+
+  return `${normalizedBaseURL}${normalizedEndpoint}`
+}
+
+function buildBodyPreview(value = '') {
+  return String(value).replace(/\s+/g, ' ').trim().slice(0, 300)
+}
+
+function isHtmlResponseBody(value = '') {
+  const normalized = String(value).trim().toLowerCase()
+  return normalized.includes('<!doctype html') || normalized.includes('<html')
+}
+
 /**
  * Cliente HTTP base para hacer peticiones a la API externa.
  */
@@ -26,7 +50,7 @@ class ApiClient {
     return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
   }
 
-  async parseResponse(response) {
+  async parseResponse(response, requestMeta = {}) {
     const contentType = response.headers.get('content-type') || ''
     const contentLength = response.headers.get('content-length')
 
@@ -38,14 +62,39 @@ class ApiClient {
       return response.json()
     }
 
-    return response.text()
+    const payload = await response.text()
+
+    if (isHtmlResponseBody(payload)) {
+      if (import.meta.env.DEV) {
+        console.error('[DOOH API HTML Response]', {
+          status: response.status,
+          contentType,
+          finalUrl: requestMeta.finalUrl || '',
+          bodyPreview: buildBodyPreview(payload)
+        })
+      }
+
+      throw new Error('La API devolvio HTML en lugar de JSON. Es probable que el servidor haya bloqueado la peticion o que el proxy no haya llegado al endpoint PHP.')
+    }
+
+    return payload
   }
 
   async request(endpoint, options = {}) {
     const token = this.getToken()
+    const finalUrl = buildRequestUrl(this.baseURL, endpoint)
+    const method = options.method || 'GET'
+
+    if (import.meta.env.DEV) {
+      console.info('[DOOH API Request]', {
+        endpoint,
+        finalUrl,
+        method
+      })
+    }
 
     try {
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
+      const response = await fetch(finalUrl, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -54,7 +103,11 @@ class ApiClient {
         ...options
       })
 
-      const payload = await this.parseResponse(response)
+      const payload = await this.parseResponse(response, {
+        endpoint,
+        finalUrl,
+        method
+      })
 
       if (!response.ok) {
         throw new Error(getBackendMessage(payload, `HTTP ${response.status}`))
@@ -66,7 +119,7 @@ class ApiClient {
 
       return payload
     } catch (error) {
-      console.error(`HTTP ${options.method || 'GET'} ${endpoint}:`, error)
+      console.error(`HTTP ${method} ${endpoint}:`, error)
       throw error
     }
   }
