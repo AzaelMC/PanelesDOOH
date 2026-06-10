@@ -61,6 +61,21 @@ const COLUMNAS_API_LIGERAS = [
 ]
 
 const TAMANO_LOTE_COTIZACION = 50
+const TAMANO_LOTE_CAMBIOS = 50
+
+const CAMPOS_EDITABLES_ACTUALIZACION = [
+  'screenName',
+  'city',
+  'venueType',
+  'latitude',
+  'longitude',
+  'dimensions',
+  'impressions',
+  'cardinalPoint',
+  'is_active',
+  'isValid',
+  'errors'
+]
 
 function removeControlCharacters(value = '') {
   return Array.from(String(value)).filter((character) => {
@@ -387,6 +402,260 @@ function validarRespuestaLote(response, { cotizacionId, loteActual, pantallasEsp
 
   if (response?.insertadas !== undefined && toNumber(response.insertadas, pantallasEsperadas) !== pantallasEsperadas) {
     throw new Error(`El lote ${loteActual} no se guardo completo en la API.`)
+  }
+}
+
+function obtenerPantallaId(pantalla = {}) {
+  return pickFirst(pantalla.pantallaId, pantalla.id)
+}
+
+function esIdNumericoValido(value) {
+  return value !== null && value !== undefined && /^\d+$/.test(String(value))
+}
+
+function normalizarValorComparable(campo, value) {
+  if (campo === 'latitude' || campo === 'longitude') {
+    return toNullableNumber(value)
+  }
+
+  if (campo === 'impressions') {
+    return toNumber(value, 0)
+  }
+
+  if (campo === 'is_active' || campo === 'isValid') {
+    return toBoolean(value, campo === 'is_active')
+  }
+
+  if (campo === 'errors') {
+    return JSON.stringify(normalizeErrors({ errors: value }))
+  }
+
+  return String(value ?? '').trim()
+}
+
+function prepararValorCambio(campo, value) {
+  if (campo === 'latitude' || campo === 'longitude') {
+    return toNullableNumber(value)
+  }
+
+  if (campo === 'impressions') {
+    return toNumber(value, 0)
+  }
+
+  if (campo === 'is_active' || campo === 'isValid') {
+    return toBoolean(value, campo === 'is_active')
+  }
+
+  if (campo === 'errors') {
+    return normalizeErrors({ errors: value })
+  }
+
+  return String(value ?? '').trim()
+}
+
+function detectarCambiosPantallas(filasOriginales = [], filasActuales = []) {
+  const indiceOriginales = new Map()
+
+  toArray(filasOriginales).forEach((fila) => {
+    const id = obtenerPantallaId(fila)
+
+    if (esIdNumericoValido(id)) {
+      indiceOriginales.set(String(id), fila)
+    }
+  })
+
+  const cambios = []
+
+  toArray(filasActuales).forEach((filaActual) => {
+    const pantallaId = obtenerPantallaId(filaActual)
+
+    if (!esIdNumericoValido(pantallaId)) {
+      return
+    }
+
+    const filaOriginal = indiceOriginales.get(String(pantallaId))
+
+    if (!filaOriginal) {
+      return
+    }
+
+    const campos = {}
+
+    CAMPOS_EDITABLES_ACTUALIZACION.forEach((campo) => {
+      const valorOriginal = normalizarValorComparable(campo, filaOriginal[campo])
+      const valorActual = normalizarValorComparable(campo, filaActual[campo])
+
+      if (valorOriginal !== valorActual) {
+        campos[campo] = prepararValorCambio(campo, filaActual[campo])
+      }
+    })
+
+    if (Object.keys(campos).length === 0) {
+      return
+    }
+
+    const soloCambioActivo =
+      Object.keys(campos).length === 1 &&
+      Object.prototype.hasOwnProperty.call(campos, 'is_active')
+
+    let tipo = 'actualizar'
+
+    if (soloCambioActivo && campos.is_active === false) {
+      tipo = 'desactivar'
+    }
+
+    if (soloCambioActivo && campos.is_active === true) {
+      tipo = 'reactivar'
+    }
+
+    cambios.push({
+      tipo,
+      pantallaId: Number(pantallaId),
+      campos
+    })
+  })
+
+  return cambios
+}
+
+function construirPayloadInicioActualizacion(cotizacion = {}, totalCambios = 0) {
+  return {
+    cotizacionId: String(pickFirst(cotizacion.id, cotizacion.cotizacionId, '')),
+    totalCambios,
+    nombreCampana: limpiarTextoParaApi(pickFirst(cotizacion.nombreCampana, ''), { maxLength: 255 }),
+    cliente: limpiarTextoParaApi(pickFirst(cotizacion.cliente, ''), { maxLength: 255 }),
+    nombreArchivo: limpiarTextoParaApi(pickFirst(cotizacion.nombreArchivo, ''), { maxLength: 255 }),
+    nombreHoja: limpiarTextoParaApi(pickFirst(cotizacion.nombreHoja, ''), { maxLength: 255 }),
+    notasInternas: limpiarTextoParaApi(pickFirst(cotizacion.notasInternas, ''), { maxLength: 4000 }),
+    estatus: limpiarTextoParaApi(pickFirst(cotizacion.estatus, cotizacion.estado, 'borrador'), { maxLength: 80 })
+  }
+}
+
+function logCotizacionCambiosBatchProgress({ cotizacionId, loteActual, totalLotes, cambiosEnLote }) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  console.info('[DOOH Actualizacion Cambios Batch]', {
+    cotizacionId,
+    loteActual,
+    totalLotes,
+    cambiosEnLote
+  })
+}
+
+function validarRespuestaLoteCambios(response, { cotizacionId, loteActual, cambiosEsperados }) {
+  const responseCotizacionId = extractCotizacionId(response)
+
+  if (responseCotizacionId && String(responseCotizacionId) !== String(cotizacionId)) {
+    throw new Error(`El lote ${loteActual} regreso un cotizacionId distinto al esperado.`)
+  }
+
+  if (response?.recibidos !== undefined && toNumber(response.recibidos, cambiosEsperados) !== cambiosEsperados) {
+    throw new Error(`El lote ${loteActual} no reporto la cantidad esperada de cambios recibidos.`)
+  }
+
+  if (response?.omitidos !== undefined && toNumber(response.omitidos, 0) > 0) {
+    throw new Error(response?.errores?.[0] || `El lote ${loteActual} omitio uno o mas cambios.`)
+  }
+
+  if (response?.actualizados !== undefined && toNumber(response.actualizados, cambiosEsperados) !== cambiosEsperados) {
+    throw new Error(`El lote ${loteActual} no aplico todos los cambios esperados.`)
+  }
+
+  if (response?.ok === false) {
+    throw new Error(response?.mensaje || `El lote ${loteActual} no se pudo aplicar.`)
+  }
+}
+
+async function actualizarCotizacionPorCambios(id, payload = {}) {
+  const cotizacionId = String(id)
+  const cotizacion = toObject(pickFirst(payload.cotizacion, payload, {}))
+  const filasOriginales = toArray(payload.filasOriginales)
+  const filasActuales = toArray(pickFirst(payload.filasActuales, payload.ubicaciones, []))
+  const cambios = detectarCambiosPantallas(filasOriginales, filasActuales)
+
+  if (import.meta.env.DEV) {
+    console.info('[DOOH Actualizacion Cambios Debug]', {
+      cotizacionId,
+      cambios: cambios.length,
+      filasOriginales: filasOriginales.length,
+      filasActuales: filasActuales.length
+    })
+  }
+
+  if (cambios.length === 0) {
+    return {
+      ok: true,
+      mensaje: 'No hay cambios de pantallas por guardar.',
+      cotizacionId,
+      cotizacion: null,
+      raw: {
+        sinCambios: true
+      }
+    }
+  }
+
+  const inicioResponse = await apiClient.post(
+    '/cotizaciones_actualizar_iniciar.php',
+    construirPayloadInicioActualizacion(
+      {
+        ...cotizacion,
+        id: cotizacionId
+      },
+      cambios.length
+    )
+  )
+
+  const lotes = dividirEnLotes(cambios, TAMANO_LOTE_CAMBIOS)
+  const responsesLotes = []
+
+  for (let loteIndice = 0; loteIndice < lotes.length; loteIndice += 1) {
+    const cambiosLote = lotes[loteIndice]
+    const loteActual = loteIndice + 1
+
+    logCotizacionCambiosBatchProgress({
+      cotizacionId,
+      loteActual,
+      totalLotes: lotes.length,
+      cambiosEnLote: cambiosLote.length
+    })
+
+    const loteResponse = await apiClient.post('/pantallas_cambios_lote.php', {
+      cotizacionId,
+      loteIndice: loteActual,
+      totalLotes: lotes.length,
+      cambios: cambiosLote
+    })
+
+    validarRespuestaLoteCambios(loteResponse, {
+      cotizacionId,
+      loteActual,
+      cambiosEsperados: cambiosLote.length
+    })
+
+    responsesLotes.push(loteResponse)
+  }
+
+  const finalizacionResponse = await apiClient.post('/cotizaciones_finalizar.php', {
+    cotizacionId
+  })
+  const detalleResponse = await apiClient.get(
+    `/cotizacion.php?id=${encodeURIComponent(cotizacionId)}&_ts=${Date.now()}`
+  )
+  const cotizacionActualizada = normalizeCotizacionDetalle(detalleResponse)
+
+  return {
+    ok: finalizacionResponse?.ok ?? true,
+    mensaje: finalizacionResponse?.mensaje || 'Cambios guardados correctamente.',
+    cotizacionId: extractCotizacionId(detalleResponse, cotizacionActualizada) || cotizacionId,
+    cotizacion: cotizacionActualizada,
+    raw: {
+      inicio: inicioResponse,
+      lotes: responsesLotes,
+      finalizacion: finalizacionResponse,
+      detalle: detalleResponse
+    }
   }
 }
 
@@ -825,7 +1094,7 @@ export async function obtenerCotizaciones(params = {}) {
 
 export async function obtenerCotizacionPorId(id) {
   try {
-    const response = await apiClient.get(`/cotizacion.php?id=${encodeURIComponent(id)}`)
+    const response = await apiClient.get(`/cotizacion.php?id=${encodeURIComponent(id)}&_ts=${Date.now()}`)
     return normalizeCotizacionDetalle(response)
   } catch (error) {
     if (!AUTH_MOCK_ENABLED) {
@@ -869,39 +1138,26 @@ export async function crearCotizacion(payload) {
 }
 
 export async function actualizarCotizacion(id, payload) {
-  const serializedPayload = construirPayloadCotizacion(payload)
-
   if (AUTH_MOCK_ENABLED) {
+    const filasActuales = toArray(pickFirst(payload?.filasActuales, payload?.ubicaciones, []))
     const cotizacion = normalizeCotizacionDetalle({
       cotizacion: {
-        ...serializedPayload.cotizacionTemporal,
+        ...(payload?.cotizacion || payload || {}),
         id,
         puedeEditar: true
       },
-      ubicaciones: serializedPayload.ubicaciones
+      ubicaciones: filasActuales
     })
 
     return {
       ok: true,
-      mensaje: 'Cotizacion temporal actualizada en modo mock.',
+      mensaje: 'Cambios temporales guardados en modo mock.',
       cotizacionId: String(id),
       cotizacion
     }
   }
 
-  const response = await apiClient.put(`/cotizacion.php?id=${encodeURIComponent(id)}`, serializedPayload)
-  const cotizacion =
-    response?.cotizacion || response?.ubicaciones || response?.pantallas || response?.id
-      ? normalizeCotizacionDetalle(response)
-      : null
-
-  return {
-    ok: response?.ok ?? true,
-    mensaje: response?.mensaje || 'Cotizacion actualizada correctamente.',
-    cotizacionId: extractCotizacionId(response, cotizacion) || String(id),
-    cotizacion,
-    raw: response
-  }
+  return actualizarCotizacionPorCambios(id, payload)
 }
 
 export async function archivarCotizacion(id) {

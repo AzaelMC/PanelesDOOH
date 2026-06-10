@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AUTH_MOCK_ENABLED } from '../../../config/env'
 import Boton from '../../../components/ui/Boton'
@@ -72,6 +72,13 @@ function buildPantallaResumenTexto(cotizacion, filas) {
   return `${totalActivas} activas de ${totalPantallas}`
 }
 
+function clonarSnapshotFilas(filas = []) {
+  return filas.map((fila) => ({
+    ...fila,
+    errors: Array.isArray(fila.errors) ? [...fila.errors] : []
+  }))
+}
+
 function TratamientoCotizacionContenido({ cotizacionId }) {
   const { usuario } = useAutenticacion()
   const [cotizacion, setCotizacion] = useState(null)
@@ -82,6 +89,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
   const [error, setError] = useState('')
   const [mensajeExito, setMensajeExito] = useState('')
   const [hayCambios, setHayCambios] = useState(false)
+  const filasOriginalesRef = useRef([])
 
   useEffect(() => {
     let active = true
@@ -100,6 +108,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
         }
 
         applyCotizacionToState(detalle, setCotizacion, setColumnas, setFilas)
+        filasOriginalesRef.current = clonarSnapshotFilas(detalle.ubicaciones || [])
       } catch (loadError) {
         if (!active) {
           return
@@ -108,6 +117,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
         setCotizacion(null)
         setColumnas([])
         setFilas([])
+        filasOriginalesRef.current = []
         setError(loadError.message || 'No fue posible cargar la cotizacion.')
       } finally {
         if (active) {
@@ -226,17 +236,21 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
 
     try {
       const payload = {
-        ...cotizacion,
-        columnas,
-        ubicaciones: filas,
-        totalPantallas: filas.length,
-        totalPantallasActivas: filas.filter((fila) => fila.is_active).length
+        cotizacion: {
+          ...cotizacion,
+          columnas,
+          totalPantallas: filas.length,
+          totalPantallasActivas: filas.filter((fila) => fila.is_active).length
+        },
+        filasOriginales: filasOriginalesRef.current,
+        filasActuales: filas
       }
 
       const response = await actualizarCotizacion(cotizacion.id || cotizacionId, payload)
       const siguienteCotizacion = response.cotizacion || await obtenerCotizacionPorId(cotizacion.id || cotizacionId)
 
       applyCotizacionToState(siguienteCotizacion, setCotizacion, setColumnas, setFilas)
+      filasOriginalesRef.current = clonarSnapshotFilas(siguienteCotizacion.ubicaciones || [])
       setHayCambios(false)
       setMensajeExito(response.mensaje || 'Cambios guardados correctamente.')
     } catch (saveError) {
@@ -352,7 +366,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
           <h3 className="text-lg font-semibold text-slate-950">Observaciones del flujo</h3>
           <ul className="space-y-3 text-sm leading-7 text-slate-600">
             <li>La cotizacion se carga desde backend por `cotizacion_id`.</li>
-            <li>Las ediciones locales se guardan con `PUT /cotizacion.php?id=` sobre el mismo registro.</li>
+            <li>Las ediciones locales se guardan por lotes, enviando solo los cambios detectados en pantallas.</li>
             <li>{puedeEditar ? 'Tu perfil puede editar esta cotizacion.' : 'Tu perfil solo tiene acceso de lectura en esta cotizacion.'}</li>
           </ul>
         </Tarjeta>
