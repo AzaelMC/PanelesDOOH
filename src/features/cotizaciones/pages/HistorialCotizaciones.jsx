@@ -92,23 +92,23 @@ export default function HistorialCotizaciones() {
   const filtrosActivos = Boolean(busqueda.trim() || usuarioSeleccionado || estatusSeleccionado)
 
   return (
-    <div className="space-y-8">
+    <div className="ntp-aurora-bg--history space-y-8">
       <section className="space-y-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.36em] text-slate-500">
+        <p className="ntp-page-eyebrow">
           Repositorio de propuestas
         </p>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl space-y-3">
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
+            <h2 className="ntp-page-title text-4xl">
               Historial de Cotizaciones
             </h2>
-            <p className="text-base leading-8 text-slate-600">
+            <p className="ntp-body-copy text-base leading-8">
               Explora propuestas guardadas en backend, identifica al creador responsable y abre directamente
               los flujos de tratamiento o visualizacion para cliente.
             </p>
           </div>
 
-          <Tarjeta className="min-w-[240px] bg-white/80 text-right">
+          <Tarjeta className="ntp-glass-card-strong min-w-[240px] text-right">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Resultados</p>
             <p className="mt-2 text-3xl font-semibold text-slate-950">
               {cargando ? '...' : cotizacionesFiltradas.length}
@@ -129,7 +129,7 @@ export default function HistorialCotizaciones() {
       />
 
       {cargando && (
-        <Tarjeta className="text-center">
+        <Tarjeta className="ntp-glass-card text-center">
           <p className="text-lg font-medium text-slate-900">Cargando cotizaciones...</p>
           <p className="mt-2 text-sm text-slate-500">
             Consultando GET /cotizaciones.php para recuperar el historial real.
@@ -138,11 +138,11 @@ export default function HistorialCotizaciones() {
       )}
 
       {!cargando && error && (
-        <Tarjeta className="space-y-4 text-center">
+        <Tarjeta className="ntp-glass-card space-y-4 text-center">
           <p className="text-lg font-medium text-slate-900">No fue posible cargar el historial.</p>
           <p className="text-sm text-rose-700">{error}</p>
           <div className="flex justify-center">
-            <Boton onClick={() => window.location.reload()}>
+            <Boton variant="brand" onClick={() => window.location.reload()}>
               Reintentar
             </Boton>
           </div>
@@ -158,7 +158,7 @@ export default function HistorialCotizaciones() {
       )}
 
       {!cargando && !error && cotizacionesFiltradas.length === 0 && (
-        <Tarjeta className="text-center">
+        <Tarjeta className="ntp-glass-card text-center">
           <p className="text-lg font-medium text-slate-900">
             {filtrosActivos ? 'No hay cotizaciones que coincidan.' : 'No hay cotizaciones guardadas todavia.'}
           </p>

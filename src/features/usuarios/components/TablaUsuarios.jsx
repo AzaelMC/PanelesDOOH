@@ -37,10 +37,10 @@ function formatDate(date) {
 
 export default function TablaUsuarios({ usuarios }) {
   return (
-    <Tarjeta className="hidden overflow-hidden p-0 lg:block">
+    <Tarjeta className="ntp-glass-card hidden overflow-hidden p-0 lg:block">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-left">
-          <thead className="bg-slate-50">
+          <thead className="ntp-table-head">
             <tr className="text-xs uppercase tracking-[0.22em] text-slate-500">
               <th className="px-6 py-4">Nombre</th>
               <th className="px-6 py-4">Correo</th>
@@ -50,7 +50,7 @@ export default function TablaUsuarios({ usuarios }) {
               <th className="px-6 py-4 text-right">Cotizaciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-slate-200 bg-white/55">
             {usuarios.map((usuario) => (
               <tr key={usuario.id} className="align-top">
                 <td className="px-6 py-5">

@@ -23,13 +23,13 @@ export default function FormularioLogin({ onSubmit, error, loading, authMockEnab
   }
 
   return (
-    <Tarjeta className="border-white/60 bg-white/90 p-8 sm:p-10">
+    <Tarjeta className="ntp-glass-card-strong p-8 sm:p-10">
       <div className="mb-8 space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.36em] text-slate-500">
+        <p className="ntp-page-eyebrow">
           Portal operativo
         </p>
-        <h2 className="text-3xl font-semibold text-slate-950">Iniciar sesion</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="ntp-page-title text-3xl">Iniciar sesion</h2>
+        <p className="ntp-body-copy text-sm">
           Acceso restringido a herramientas operacionales de NTP Media.
         </p>
         {authMockEnabled && (
@@ -73,7 +73,7 @@ export default function FormularioLogin({ onSubmit, error, loading, authMockEnab
           </div>
         )}
 
-        <Boton type="submit" fullWidth size="lg" loading={loading}>
+        <Boton type="submit" variant="brand" fullWidth size="lg" loading={loading}>
           Iniciar sesion
         </Boton>
       </form>

@@ -109,15 +109,15 @@ export default function NuevaCotizacion() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="ntp-aurora-bg--upload space-y-8">
       <section className="max-w-3xl space-y-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.36em] text-slate-500">
+        <p className="ntp-page-eyebrow">
           Pipeline de ingesta
         </p>
-        <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
+        <h2 className="ntp-page-title text-4xl">
           Cargar Nueva Cotizacion
         </h2>
-        <p className="text-base leading-8 text-slate-600">
+        <p className="ntp-body-copy text-base leading-8">
           El parser se ejecuta completamente en el navegador, detecta la hoja de inventario,
           localiza encabezados y ahora guarda la cotizacion real en la API antes de pasar al tratamiento.
         </p>
@@ -125,10 +125,10 @@ export default function NuevaCotizacion() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.95fr)]">
         <div className="space-y-6">
-          <Tarjeta className="space-y-6">
+          <Tarjeta className="ntp-glass-card space-y-6">
             <div className="space-y-2">
-              <h3 className="text-xl font-semibold text-slate-950">Carga inicial del archivo</h3>
-              <p className="text-sm text-slate-500">
+              <h3 className="ntp-page-title text-xl">Carga inicial del archivo</h3>
+              <p className="ntp-body-copy text-sm">
                 Se soportan archivos `.xlsx`, `.xls` y `.csv`. El analisis es local y solo se envia a backend al confirmar la cotizacion.
               </p>
             </div>
@@ -137,7 +137,7 @@ export default function NuevaCotizacion() {
 
             <div className="flex flex-wrap gap-3">
               <Boton
-                variant="secondary"
+                variant="brandSecondary"
                 onClick={reiniciarAnalizador}
                 disabled={!nombreArchivo || cargando || guardando}
               >
@@ -183,10 +183,10 @@ export default function NuevaCotizacion() {
         </div>
 
         <div className="space-y-6">
-          <Tarjeta className="space-y-5">
+          <Tarjeta className="ntp-glass-card-strong space-y-5">
             <div className="space-y-2">
-              <h3 className="text-xl font-semibold text-slate-950">Datos preliminares</h3>
-              <p className="text-sm text-slate-500">
+              <h3 className="ntp-page-title text-xl">Datos preliminares</h3>
+              <p className="ntp-body-copy text-sm">
                 Se incorporaran a la cotizacion real junto con el archivo ya analizado.
               </p>
             </div>
@@ -223,20 +223,20 @@ export default function NuevaCotizacion() {
               </div>
             )}
 
-            <Boton size="lg" onClick={handleContinue} disabled={!puedeContinuar} loading={guardando}>
+            <Boton variant="brand" size="lg" onClick={handleContinue} disabled={!puedeContinuar} loading={guardando}>
               Continuar a tratamiento
             </Boton>
 
             {guardando && (
-              <p className="text-sm text-slate-500">
+              <p className="ntp-body-copy text-sm">
                 Guardando pantallas por lotes...
               </p>
             )}
           </Tarjeta>
 
           {diagnostico.advertencias.length > 0 && (
-            <Tarjeta className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-950">Advertencias del parser</h3>
+            <Tarjeta className="ntp-glass-card space-y-4">
+              <h3 className="ntp-page-title text-lg">Advertencias del parser</h3>
               <ul className="space-y-3 text-sm leading-7 text-slate-600">
                 {diagnostico.advertencias.map((advertencia) => (
                   <li key={advertencia}>{advertencia}</li>

@@ -13,10 +13,10 @@ export default function FiltrosCotizaciones({
   onEstatusChange
 }) {
   return (
-    <Tarjeta className="space-y-5">
+    <Tarjeta className="ntp-glass-card space-y-5">
       <div className="space-y-2">
-        <h3 className="text-lg font-semibold text-slate-950">Filtros rapidos</h3>
-        <p className="text-sm text-slate-500">
+        <h3 className="ntp-page-title text-lg">Filtros rapidos</h3>
+        <p className="ntp-body-copy text-sm">
           Busca por campana o cliente y acota por responsable creador o estatus.
         </p>
       </div>

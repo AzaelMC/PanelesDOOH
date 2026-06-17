@@ -47,28 +47,28 @@ export default function PanelPrincipal() {
   ))
 
   return (
-    <div className="space-y-8">
+    <div className="ntp-aurora-bg--panel space-y-8">
       <section className="space-y-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.36em] text-slate-500">
+        <p className="ntp-page-eyebrow">
           Centro de control administrativo
         </p>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl space-y-3">
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
+            <h2 className="ntp-page-title text-4xl">
               Opera cotizaciones y validacion geografica desde un unico flujo.
             </h2>
-            <p className="text-base leading-8 text-slate-600">
+            <p className="ntp-body-copy text-base leading-8">
               El panel ya valida autenticacion real contra la API externa y muestra cada modulo segun
               el rol de la cuenta activa.
             </p>
           </div>
 
-          <Tarjeta className="min-w-[260px] space-y-2 bg-slate-950 text-white">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-300">
+          <Tarjeta className="ntp-glass-card-strong min-w-[260px] space-y-2 text-[var(--ntp-ink)]">
+            <p className="ntp-page-eyebrow">
               Estado operativo
             </p>
             <p className="text-3xl font-semibold">Acceso verificado</p>
-            <p className="text-sm text-slate-300">
+            <p className="ntp-body-copy text-sm">
               Sesion real, rutas protegidas y visibilidad por rol activas.
             </p>
           </Tarjeta>

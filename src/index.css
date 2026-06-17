@@ -1,9 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@600;700;800&family=Montserrat:wght@400;500;600;700&display=swap');
+@import "./styles/ntp-theme.css";
 @import "tailwindcss";
 
+
 :root {
-  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
+  font-family: var(--ntp-body-font);
+  color: var(--ntp-ink);
+  background: #f7f2ff;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -23,10 +26,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(148, 163, 184, 0.18), transparent 32%),
-    linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
-  color: #0f172a;
+  background: #f7f2ff;
+  color: var(--ntp-ink);
 }
 
 button,
@@ -41,6 +42,6 @@ textarea {
 }
 
 ::selection {
-  background: rgba(15, 23, 42, 0.15);
-  color: #020617;
+  background: rgba(var(--ntp-purple-hover-rgb), 0.35);
+  color: var(--ntp-ink);
 }

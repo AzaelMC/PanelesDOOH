@@ -15,7 +15,7 @@ export default function CampoTexto({
   const Component = as
   const inputId = id || name || label?.toLowerCase().replace(/\s+/g, '-') || undefined
   const baseClasses =
-    'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-200'
+    'ntp-input w-full rounded-2xl border px-4 py-3 text-sm text-slate-900 transition focus:outline-none'
 
   return (
     <div className={`flex flex-col gap-2 ${containerClassName}`}>

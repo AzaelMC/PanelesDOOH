@@ -56,14 +56,14 @@ export default function CajaCargaExcel({ onFileSelect, disabled = false }) {
   }
 
   return (
-    <Tarjeta className={`border-2 border-dashed ${isDragOver ? 'border-sky-500 bg-sky-50' : 'border-slate-300'}`}>
+    <Tarjeta className={`ntp-dropzone border-2 border-dashed ${isDragOver ? 'ntp-dropzone-active' : ''}`}>
       <div
         className="flex flex-col items-center justify-center gap-4 py-12"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <svg className="h-12 w-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-12 w-12 text-[var(--ntp-purple-hover)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -87,7 +87,7 @@ export default function CajaCargaExcel({ onFileSelect, disabled = false }) {
         />
 
         <label htmlFor="excel-upload">
-          <Boton as="span" disabled={disabled}>
+          <Boton as="span" variant="brand" disabled={disabled}>
             Seleccionar archivo
           </Boton>
         </label>

@@ -26,6 +26,8 @@ export default function Boton({
 
   const variants = {
     primary: 'bg-slate-950 text-white hover:bg-slate-800 focus-visible:ring-slate-900 disabled:bg-slate-300',
+    brand: 'ntp-button-primary focus-visible:ring-[var(--ntp-purple-hover)] disabled:bg-slate-300 disabled:shadow-none',
+    brandSecondary: 'ntp-button-secondary border focus-visible:ring-[var(--ntp-purple-hover)] disabled:bg-white/50 disabled:text-slate-400',
     secondary: 'bg-white text-slate-900 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-slate-400',
     ghost: 'bg-transparent text-slate-700 hover:bg-slate-100 focus-visible:ring-slate-300',
     danger: 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500'

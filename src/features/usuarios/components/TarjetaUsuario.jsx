@@ -35,10 +35,10 @@ function formatDate(date) {
 
 export default function TarjetaUsuario({ usuario }) {
   return (
-    <Tarjeta className="space-y-5 lg:hidden">
+    <Tarjeta className="ntp-glass-card space-y-5 lg:hidden">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-lg font-semibold text-slate-950">{usuario.nombre}</p>
+          <p className="ntp-page-title text-lg">{usuario.nombre}</p>
           <p className="mt-1 text-sm text-slate-500">{usuario.correo || usuario.rol}</p>
         </div>
         <EtiquetaEstado status={getStatusVariant(usuario.estadoCredenciales)}>

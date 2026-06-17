@@ -41,20 +41,20 @@ function formatDate(date) {
 
 export default function TarjetaCotizacion({ cotizacion }) {
   return (
-    <Tarjeta className="flex h-full flex-col gap-6">
+    <Tarjeta className="ntp-glass-card flex h-full flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-3">
           <EtiquetaEstado status={obtenerStatus(cotizacion.estado)}>
             {cotizacion.estado}
           </EtiquetaEstado>
           <div>
-            <h3 className="text-xl font-semibold text-slate-950">{cotizacion.nombreCampana}</h3>
+            <h3 className="ntp-page-title text-xl">{cotizacion.nombreCampana}</h3>
             <p className="mt-1 text-sm text-slate-500">{cotizacion.cliente}</p>
           </div>
         </div>
-        <div className="rounded-3xl bg-slate-100 px-4 py-3 text-right">
+        <div className="ntp-soft-panel rounded-3xl px-4 py-3 text-right">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pantallas</p>
-          <p className="text-xl font-semibold text-slate-950">{cotizacion.totalPantallas}</p>
+          <p className="ntp-page-title text-xl">{cotizacion.totalPantallas}</p>
           <p className="mt-1 text-xs text-slate-500">
             Activas: {cotizacion.totalPantallasActivas}
           </p>
@@ -73,10 +73,10 @@ export default function TarjetaCotizacion({ cotizacion }) {
       </dl>
 
       <div className="flex flex-wrap gap-3">
-        <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/tratamiento`}>
+        <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/tratamiento`} variant="brand">
           Abrir tratamiento
         </Boton>
-        <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/mapa`} variant="secondary">
+        <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/mapa`} variant="brandSecondary">
           Ver mapa
         </Boton>
       </div>
