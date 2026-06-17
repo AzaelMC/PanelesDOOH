@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Tarjeta from '../../../components/ui/Tarjeta'
-import { cargarGoogleMaps, tieneGoogleMapsApiKey } from '../../../services/googleMapsLoader'
+import { cargarGoogleMaps, cargarGoogleMapsMarker, obtenerGoogleMapsConfig } from '../../../services/googleMapsLoader'
 import { prepararPantallasMapa } from '../utils/prepararPantallasMapa'
 
 const ZOOM_MAXIMO_INICIAL = 13
@@ -15,19 +15,43 @@ const MAPA_INICIAL = {
   clickableIcons: false
 }
 
-function crearIconoMarcador(color = '#0f172a') {
-  const svg = `
+function crearContenidoMarcador({ color = '#0f172a', label = 'DO', selected = false } = {}) {
+  const contenedor = document.createElement('div')
+  contenedor.style.position = 'relative'
+  contenedor.style.width = '46px'
+  contenedor.style.height = '56px'
+  contenedor.style.transform = selected ? 'scale(1.06)' : 'scale(1)'
+  contenedor.style.transformOrigin = 'center bottom'
+  contenedor.style.cursor = 'pointer'
+
+  const svgWrapper = document.createElement('div')
+  svgWrapper.innerHTML = `
     <svg width="46" height="56" viewBox="0 0 46 56" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M23 2C11.95 2 3 10.95 3 22C3 37 23 54 23 54C23 54 43 37 43 22C43 10.95 34.05 2 23 2Z" fill="${color}" stroke="white" stroke-width="4"/>
       <circle cx="23" cy="22" r="7" fill="white"/>
     </svg>
   `
 
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new window.google.maps.Size(46, 56),
-    anchor: new window.google.maps.Point(23, 56)
-  }
+  const texto = document.createElement('span')
+  texto.textContent = label
+  texto.style.position = 'absolute'
+  texto.style.left = '50%'
+  texto.style.top = '22px'
+  texto.style.transform = 'translate(-50%, -50%)'
+  texto.style.color = selected ? '#ffffff' : '#0f172a'
+  texto.style.fontSize = '11px'
+  texto.style.fontWeight = '700'
+  texto.style.lineHeight = '1'
+  texto.style.pointerEvents = 'none'
+
+  contenedor.appendChild(svgWrapper)
+  contenedor.appendChild(texto)
+
+  return contenedor
+}
+
+function obtenerEtiquetaMarcador(pantalla = {}) {
+  return pantalla.city?.slice(0, 2).toUpperCase() || 'DO'
 }
 
 function formatearImpresiones(value) {
@@ -38,19 +62,17 @@ function formatearImpresiones(value) {
   return value.toLocaleString('es-MX')
 }
 
-function aplicarEstiloMarcador(markerData, selected, iconos) {
-  if (!markerData?.marker || !iconos) {
+function aplicarEstiloMarcador(markerData, selected) {
+  if (!markerData?.marker) {
     return
   }
 
-  markerData.marker.setIcon(selected ? iconos.seleccionado : iconos.base)
-  markerData.marker.setZIndex(selected ? 20 : 10)
-  markerData.marker.setLabel({
-    text: markerData.pantalla.city?.slice(0, 2).toUpperCase() || 'DO',
-    color: selected ? '#ffffff' : '#0f172a',
-    fontSize: '11px',
-    fontWeight: '700'
+  markerData.marker.content = crearContenidoMarcador({
+    color: selected ? '#0f172a' : '#334155',
+    label: obtenerEtiquetaMarcador(markerData.pantalla),
+    selected
   })
+  markerData.marker.zIndex = selected ? 20 : 10
 }
 
 export default function LienzoMapaPlaceholder({
@@ -62,8 +84,8 @@ export default function LienzoMapaPlaceholder({
   const mapaRef = useRef(null)
   const instanciaMapaRef = useRef(null)
   const mapsRef = useRef(null)
+  const markerLibraryRef = useRef(null)
   const marcadoresRef = useRef(new Map())
-  const iconosRef = useRef(null)
   const pantallaSeleccionadaAnteriorRef = useRef(null)
   const [mapaListo, setMapaListo] = useState(false)
   const [estado, setEstado] = useState('idle')
@@ -73,21 +95,15 @@ export default function LienzoMapaPlaceholder({
     return prepararPantallasMapa(pantallas)
   }, [pantallas])
 
-  const mensajeConfiguracion = !tieneGoogleMapsApiKey()
-    ? 'No se encontro la API key de Google Maps. Revisa VITE_GOOGLE_MAPS_API_KEY en .env.local.'
-    : ''
-
   const mensajeCoordenadas = pantallasValidas.length === 0
     ? 'No hay pantallas con latitud y longitud validas para pintar en el mapa.'
     : ''
 
-  const estadoVisible = mensajeConfiguracion
-    ? 'error'
-    : mensajeCoordenadas
-      ? 'sin-coordenadas'
-      : estado
+  const estadoVisible = mensajeCoordenadas
+    ? 'sin-coordenadas'
+    : estado
 
-  const mensajeVisible = mensajeConfiguracion || mensajeCoordenadas || mensajeError
+  const mensajeVisible = mensajeCoordenadas || mensajeError
 
   const pantallaSeleccionadaPreparada = useMemo(() => {
     if (!pantallaSeleccionada) {
@@ -98,10 +114,6 @@ export default function LienzoMapaPlaceholder({
   }, [pantallaSeleccionada])
 
   useEffect(() => {
-    if (mensajeConfiguracion) {
-      return undefined
-    }
-
     let cancelado = false
 
     async function inicializarMapa() {
@@ -109,21 +121,24 @@ export default function LienzoMapaPlaceholder({
         setEstado('cargando')
         setMensajeError('')
 
-        const maps = await cargarGoogleMaps()
+        const [maps, markerLibrary, mapsConfig] = await Promise.all([
+          cargarGoogleMaps(),
+          cargarGoogleMapsMarker(),
+          obtenerGoogleMapsConfig()
+        ])
 
         if (cancelado || !mapaRef.current) {
           return
         }
 
         mapsRef.current = maps
+        markerLibraryRef.current = markerLibrary
 
         if (!instanciaMapaRef.current) {
-          instanciaMapaRef.current = new maps.Map(mapaRef.current, MAPA_INICIAL)
-        }
-
-        iconosRef.current = {
-          base: crearIconoMarcador('#334155'),
-          seleccionado: crearIconoMarcador('#0f172a')
+          instanciaMapaRef.current = new maps.Map(mapaRef.current, {
+            ...MAPA_INICIAL,
+            mapId: mapsConfig.mapId
+          })
         }
 
         setMapaListo(true)
@@ -141,18 +156,19 @@ export default function LienzoMapaPlaceholder({
     return () => {
       cancelado = true
     }
-  }, [mensajeConfiguracion])
+  }, [])
 
   useEffect(() => {
-    if (!mapaListo || !instanciaMapaRef.current || !mapsRef.current) {
+    if (!mapaListo || !instanciaMapaRef.current || !mapsRef.current || !markerLibraryRef.current) {
       return undefined
     }
 
     const map = instanciaMapaRef.current
     const maps = mapsRef.current
+    const markerLibrary = markerLibraryRef.current
 
     marcadoresRef.current.forEach(({ marker }) => {
-      marker.setMap(null)
+      marker.map = null
     })
     marcadoresRef.current.clear()
     pantallaSeleccionadaAnteriorRef.current = null
@@ -169,21 +185,20 @@ export default function LienzoMapaPlaceholder({
     pantallasValidas.forEach((pantalla) => {
       bounds.extend(pantalla.latLng)
 
-      const marker = new maps.Marker({
+      const marker = new markerLibrary.AdvancedMarkerElement({
         position: pantalla.latLng,
         map,
         title: pantalla.screenName,
-        icon: iconosRef.current.base,
+        content: crearContenidoMarcador({
+          color: '#334155',
+          label: obtenerEtiquetaMarcador(pantalla),
+          selected: false
+        }),
         zIndex: 10,
-        label: {
-          text: pantalla.city?.slice(0, 2).toUpperCase() || 'DO',
-          color: '#0f172a',
-          fontSize: '11px',
-          fontWeight: '700'
-        }
+        gmpClickable: true
       })
 
-      marker.addListener('click', () => seleccionarPantalla(pantalla.id))
+      marker.addEventListener('gmp-click', () => seleccionarPantalla(pantalla.id))
 
       marcadoresRef.current.set(pantalla.id, {
         marker,
@@ -210,14 +225,14 @@ export default function LienzoMapaPlaceholder({
   }, [mapaListo, pantallasValidas, seleccionarPantalla])
 
   useEffect(() => {
-    if (!mapaListo || !instanciaMapaRef.current || !iconosRef.current) {
+    if (!mapaListo || !instanciaMapaRef.current) {
       return
     }
 
     const markerAnteriorId = pantallaSeleccionadaAnteriorRef.current
 
     if (markerAnteriorId && markerAnteriorId !== pantallaSeleccionadaPreparada?.id) {
-      aplicarEstiloMarcador(marcadoresRef.current.get(markerAnteriorId), false, iconosRef.current)
+      aplicarEstiloMarcador(marcadoresRef.current.get(markerAnteriorId), false)
     }
 
     if (!pantallaSeleccionadaPreparada) {
@@ -232,7 +247,7 @@ export default function LienzoMapaPlaceholder({
       return
     }
 
-    aplicarEstiloMarcador(markerActual, true, iconosRef.current)
+    aplicarEstiloMarcador(markerActual, true)
     pantallaSeleccionadaAnteriorRef.current = pantallaSeleccionadaPreparada.id
 
     if (centrarSeleccion) {
@@ -244,7 +259,7 @@ export default function LienzoMapaPlaceholder({
   useEffect(() => {
     return () => {
       marcadoresRef.current.forEach(({ marker }) => {
-        marker.setMap(null)
+        marker.map = null
       })
       marcadoresRef.current.clear()
     }

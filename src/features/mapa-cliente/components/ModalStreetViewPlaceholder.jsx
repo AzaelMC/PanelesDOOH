@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Boton from '../../../components/ui/Boton'
-import { cargarGoogleMaps, tieneGoogleMapsApiKey } from '../../../services/googleMapsLoader'
+import { cargarGoogleMaps } from '../../../services/googleMapsLoader'
 import { prepararPantallasMapa } from '../utils/prepararPantallasMapa'
 
 const RADIO_BUSQUEDA_STREET_VIEW = 80
@@ -19,28 +19,22 @@ export default function ModalStreetViewPlaceholder({ open, pantalla, onClose }) 
     return prepararPantallasMapa([pantalla]).pantallasValidas[0] || null
   }, [pantalla])
 
-  const mensajeConfiguracion = !tieneGoogleMapsApiKey()
-    ? 'No se encontro la API key de Google Maps. Revisa VITE_GOOGLE_MAPS_API_KEY en .env.local.'
-    : ''
-
   const mensajeCoordenadas = open && pantalla && !pantallaPreparada
     ? 'Esta pantalla no tiene latitud y longitud validas para abrir Street View.'
     : ''
 
-  const estadoVisible = mensajeConfiguracion
+  const estadoVisible = mensajeCoordenadas
     ? 'error'
-    : mensajeCoordenadas
-      ? 'error'
-      : estado
+    : estado
 
-  const mensajeVisible = mensajeConfiguracion || mensajeCoordenadas || mensajeError
+  const mensajeVisible = mensajeCoordenadas || mensajeError
 
   useEffect(() => {
     if (!open || !pantalla) {
       return undefined
     }
 
-    if (mensajeConfiguracion || mensajeCoordenadas || !pantallaPreparada) {
+    if (mensajeCoordenadas || !pantallaPreparada) {
       return undefined
     }
 
@@ -112,7 +106,7 @@ export default function ModalStreetViewPlaceholder({ open, pantalla, onClose }) 
         streetViewNode.innerHTML = ''
       }
     }
-  }, [open, pantalla, pantallaPreparada, mensajeConfiguracion, mensajeCoordenadas])
+  }, [open, pantalla, pantallaPreparada, mensajeCoordenadas])
 
   if (!open || !pantalla) {
     return null

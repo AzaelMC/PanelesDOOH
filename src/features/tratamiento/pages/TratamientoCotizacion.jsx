@@ -6,6 +6,7 @@ import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
 import { useAutenticacion } from '../../autenticacion/context/useAutenticacion'
 import BarraOperaciones from '../components/BarraOperaciones'
+import CalculosCpmInversion from '../components/CalculosCpmInversion'
 import BotonAgregarColumna from '../components/BotonAgregarColumna'
 import GrillaTratamiento from '../components/GrillaTratamiento'
 import ResumenPresupuesto from '../components/ResumenPresupuesto'
@@ -373,6 +374,8 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
       </section>
 
       <ResumenPresupuesto filas={filas} columnas={columnas} />
+
+      <CalculosCpmInversion disabled={!puedeEditar} />
 
       <section className="grid gap-6 2xl:grid-cols-[1fr_auto]">
         <BarraOperaciones

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { FixedSizeList as List } from 'react-window'
 import Boton from '../../../components/ui/Boton'
 import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
@@ -82,6 +83,24 @@ export default function PanelListadoPantallas({
   seleccionarPantalla,
   onValidarEntorno
 }) {
+  const listaRef = useRef(null)
+
+  useEffect(() => {
+    if (!pantallaSeleccionadaId || pantallas.length === 0) {
+      return
+    }
+
+    const pantallaSeleccionadaIndex = pantallas.findIndex(
+      (pantalla) => pantalla.id === pantallaSeleccionadaId
+    )
+
+    if (pantallaSeleccionadaIndex < 0) {
+      return
+    }
+
+    listaRef.current?.scrollToItem(pantallaSeleccionadaIndex, 'smart')
+  }, [pantallas, pantallaSeleccionadaId])
+
   const itemData = {
     pantallas,
     pantallaSeleccionadaId,
@@ -106,6 +125,7 @@ export default function PanelListadoPantallas({
         </div>
       ) : (
         <List
+          ref={listaRef}
           height={ALTURA_LISTA}
           itemCount={pantallas.length}
           itemSize={ALTURA_FILA}

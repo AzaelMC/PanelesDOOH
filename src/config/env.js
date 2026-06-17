@@ -1,7 +1,7 @@
 /**
  * Configuracion del entorno.
- * Lee variables de Vite para apuntar a una API externa,
- * controlar el modo temporal de autenticacion mock y cargar Google Maps.
+ * Lee variables de Vite para apuntar a una API externa
+ * y controlar el modo temporal de autenticacion mock.
  */
 
 const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -27,7 +27,6 @@ export const AUTH_MOCK_ENABLED = import.meta.env.VITE_AUTH_MOCK === 'true'
 
 export const API_BASE_URL = resolveApiBaseUrl(RAW_API_BASE_URL)
 
-export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 
 if (import.meta.env.DEV) {
   console.info('[DOOH Auth]', {
@@ -39,6 +38,5 @@ if (import.meta.env.DEV) {
 
 export default {
   API_BASE_URL,
-  AUTH_MOCK_ENABLED,
-  GOOGLE_MAPS_API_KEY
+  AUTH_MOCK_ENABLED
 }
