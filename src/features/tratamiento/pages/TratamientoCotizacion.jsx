@@ -375,7 +375,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
 
       <ResumenPresupuesto filas={filas} columnas={columnas} />
 
-      <CalculosCpmInversion disabled={!puedeEditar} />
+      <CalculosCpmInversion cotizacionId={cotizacion.id || cotizacionId} disabled={!puedeEditar} />
 
       <section className="grid gap-6 2xl:grid-cols-[1fr_auto]">
         <BarraOperaciones

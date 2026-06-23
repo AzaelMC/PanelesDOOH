@@ -1,45 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Tarjeta from '../../../components/ui/Tarjeta'
-
-const ESTADO_INICIAL = {
-  cpmBase: '',
-  rebate: '',
-  extraRebate: '',
-  ganancia: '',
-  fased: '',
-  incluirCpmTp: false,
-  tarifaPublicada: '',
-  cpmSeleccionado: 'cliente',
-  valorCpmInversion: '',
-  impresiones: '',
-  divisor: '1000'
-}
+import {
+  CPM_ESTADO_INICIAL,
+  construirPayloadCpm,
+  guardarCpmCotizacion,
+  mapearCpmApiAEstado,
+  obtenerCpmCotizacion
+} from '../services/cpmApi'
+import { calcularCpmInversion, parseNumeroOpcional } from '../utils/calcularCpmInversion'
 
 const INPUT_CLASSES =
   'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500'
 
-function parseDecimal(value) {
-  if (value === null || value === undefined || value === '') {
-    return 0
-  }
-
-  const parsed = Number(String(value).replace(',', '.'))
-  return Number.isFinite(parsed) ? parsed : 0
-}
+const AUTOSAVE_DELAY_MS = 800
 
 function formatCurrency(value) {
+  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0
+
   return new Intl.NumberFormat('es-MX', {
     style: 'currency',
     currency: 'MXN',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(value)
+  }).format(safeValue)
 }
 
 function formatFormulaNumber(value) {
+  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0
+
   return new Intl.NumberFormat('es-MX', {
     maximumFractionDigits: 4
-  }).format(value)
+  }).format(safeValue)
+}
+
+function formatInputNumber(value, decimals = 2) {
+  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
+    return ''
+  }
+
+  return Number(value).toFixed(decimals)
 }
 
 function CopyIcon({ size = 18 }) {
@@ -148,93 +147,146 @@ function ResultadoCopiable({ id, label, value, copiedKey, onCopy, disabled = fal
   )
 }
 
-export default function CalculosCpmInversion({ disabled = false }) {
-  const [formData, setFormData] = useState(ESTADO_INICIAL)
-  const [sincronizarValorCpm, setSincronizarValorCpm] = useState(true)
+export default function CalculosCpmInversion({ cotizacionId, disabled = false }) {
+  const [formData, setFormData] = useState(CPM_ESTADO_INICIAL)
+  const [cpmInicialCargado, setCpmInicialCargado] = useState(false)
+  const [errorCpm, setErrorCpm] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
+
   const copyTimeoutRef = useRef(null)
+  const autosaveTimeoutRef = useRef(null)
+  const ultimoPayloadPersistidoRef = useRef('')
+  const usuarioModificoCpmRef = useRef(false)
 
-  const cpmCliente = useMemo(() => {
-    const cpmBase = parseDecimal(formData.cpmBase)
-    const porcentajeTotal =
-      parseDecimal(formData.rebate) +
-      parseDecimal(formData.extraRebate) +
-      parseDecimal(formData.ganancia) +
-      parseDecimal(formData.fased)
+  const calculos = useMemo(
+    () => calcularCpmInversion(formData),
+    [formData]
+  )
 
-    return cpmBase * (1 + porcentajeTotal / 100)
-  }, [formData.cpmBase, formData.rebate, formData.extraRebate, formData.ganancia, formData.fased])
-
-  const cpmTp = useMemo(() => {
-    const tarifaPublicada = parseDecimal(formData.tarifaPublicada)
-    return cpmCliente * (1 + tarifaPublicada / 100)
-  }, [cpmCliente, formData.tarifaPublicada])
-
-  const cpmSugerido = formData.incluirCpmTp ? cpmTp : cpmCliente
-
-  const inversionEstimada = useMemo(() => {
-    const valorCpm = parseDecimal(formData.valorCpmInversion)
-    const impresiones = parseDecimal(formData.impresiones)
-    const divisor = parseDecimal(formData.divisor)
-
-    if (divisor === 0) {
-      return 0
-    }
-
-    return (valorCpm * impresiones) / divisor
-  }, [formData.valorCpmInversion, formData.impresiones, formData.divisor])
+  const cpmCliente = calculos.cpm_cliente ?? 0
+  const cpmTp = calculos.cpm_tp ?? 0
+  const inversionEstimada = calculos.inversion ?? 0
+  const valorCpmCalculado = calculos.valor_cpm ?? 0
+  const divisorFormula = parseNumeroOpcional(formData.divisor) || 1000
+  const valorCpmInput = formData.cpm_fuente === 'manual'
+    ? formData.valor_cpm
+    : formatInputNumber(calculos.valor_cpm)
 
   useEffect(() => () => {
     if (copyTimeoutRef.current) {
       clearTimeout(copyTimeoutRef.current)
     }
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current)
+    }
   }, [])
 
   useEffect(() => {
-    setFormData((current) => {
-      if (current.incluirCpmTp || current.cpmSeleccionado !== 'tp') {
-        return current
+    let active = true
+
+    async function cargarCpm() {
+      if (!cotizacionId) {
+        setFormData({ ...CPM_ESTADO_INICIAL })
+        setCpmInicialCargado(true)
+        return
       }
 
-      return {
-        ...current,
-        cpmSeleccionado: 'cliente',
-        valorCpmInversion: sincronizarValorCpm ? cpmCliente.toFixed(2) : current.valorCpmInversion
+      setCpmInicialCargado(false)
+      setErrorCpm('')
+      usuarioModificoCpmRef.current = false
+      ultimoPayloadPersistidoRef.current = ''
+
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
       }
-    })
-  }, [cpmCliente, sincronizarValorCpm])
+
+      try {
+        const registro = await obtenerCpmCotizacion(cotizacionId)
+
+        if (!active) {
+          return
+        }
+
+        const siguienteEstado = mapearCpmApiAEstado(registro)
+        setFormData(siguienteEstado)
+        ultimoPayloadPersistidoRef.current = JSON.stringify(
+          construirPayloadCpm(cotizacionId, siguienteEstado)
+        )
+      } catch (loadError) {
+        if (!active) {
+          return
+        }
+
+        setFormData({ ...CPM_ESTADO_INICIAL })
+        setErrorCpm(loadError.message || 'No fue posible cargar CPM e inversion.')
+      } finally {
+        if (active) {
+          setCpmInicialCargado(true)
+        }
+      }
+    }
+
+    cargarCpm()
+
+    return () => {
+      active = false
+    }
+  }, [cotizacionId])
 
   useEffect(() => {
-    setFormData((current) => {
-      if (!sincronizarValorCpm) {
-        return current
-      }
+    if (!cpmInicialCargado || disabled || !cotizacionId || !usuarioModificoCpmRef.current) {
+      return undefined
+    }
 
-      const nextValue = current.cpmSeleccionado === 'tp' && current.incluirCpmTp
-        ? cpmTp
-        : cpmCliente
+    const payload = construirPayloadCpm(cotizacionId, formData)
+    const payloadSerializado = JSON.stringify(payload)
 
-      return {
-        ...current,
-        valorCpmInversion: nextValue.toFixed(2)
+    if (payloadSerializado === ultimoPayloadPersistidoRef.current) {
+      return undefined
+    }
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current)
+    }
+
+    autosaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const registroGuardado = await guardarCpmCotizacion(payload)
+        const estadoPersistido = mapearCpmApiAEstado(registroGuardado)
+
+        ultimoPayloadPersistidoRef.current = JSON.stringify(
+          construirPayloadCpm(cotizacionId, estadoPersistido)
+        )
+        setErrorCpm('')
+      } catch (saveError) {
+        setErrorCpm(saveError.message || 'No fue posible guardar CPM e inversion.')
       }
-    })
-  }, [cpmCliente, cpmTp, sincronizarValorCpm])
+    }, AUTOSAVE_DELAY_MS)
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+      }
+    }
+  }, [cotizacionId, cpmInicialCargado, disabled, formData])
+
+  const marcarCambioUsuario = () => {
+    usuarioModificoCpmRef.current = true
+    setErrorCpm('')
+  }
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target
 
-    if (name === 'valorCpmInversion') {
-      setSincronizarValorCpm(false)
-    }
+    marcarCambioUsuario()
 
-    if (name === 'incluirCpmTp') {
-      setSincronizarValorCpm(true)
+    if (name === 'usar_tp') {
       setFormData((current) => ({
         ...current,
-        incluirCpmTp: checked,
-        cpmSeleccionado: checked ? 'tp' : 'cliente',
-        valorCpmInversion: checked ? cpmTp.toFixed(2) : cpmCliente.toFixed(2)
+        usar_tp: checked,
+        tp: checked ? current.tp : '',
+        cpm_fuente: !checked && current.cpm_fuente === 'tp' ? 'cliente' : current.cpm_fuente
       }))
       return
     }
@@ -247,13 +299,15 @@ export default function CalculosCpmInversion({ disabled = false }) {
 
   const handleSeleccionarCpm = (event) => {
     const selected = event.target.value
-    const nextValue = selected === 'tp' ? cpmTp : cpmCliente
 
-    setSincronizarValorCpm(true)
+    marcarCambioUsuario()
+
     setFormData((current) => ({
       ...current,
-      cpmSeleccionado: selected,
-      valorCpmInversion: nextValue.toFixed(2)
+      cpm_fuente: selected,
+      valor_cpm: selected === 'manual' && current.valor_cpm === ''
+        ? formatInputNumber(valorCpmCalculado)
+        : current.valor_cpm
     }))
   }
 
@@ -262,7 +316,8 @@ export default function CalculosCpmInversion({ disabled = false }) {
       return
     }
 
-    const rawValue = value.toFixed(2)
+    const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0
+    const rawValue = safeValue.toFixed(2)
 
     try {
       await navigator.clipboard.writeText(rawValue)
@@ -288,7 +343,14 @@ export default function CalculosCpmInversion({ disabled = false }) {
 
   return (
     <Tarjeta className="space-y-5">
-      <h3 className="text-lg font-semibold text-slate-950">CPM e inversión</h3>
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold text-slate-950">CPM e inversión</h3>
+        {errorCpm && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {errorCpm}
+          </div>
+        )}
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5">
@@ -297,11 +359,11 @@ export default function CalculosCpmInversion({ disabled = false }) {
           <div className="space-y-4">
             <NumericRow
               label="CPM base"
-              name="cpmBase"
-              value={formData.cpmBase}
+              name="cpm_base"
+              value={formData.cpm_base}
               onChange={handleChange}
               placeholder="0.00"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
             <NumericRow
               label="Rebate %"
@@ -309,23 +371,23 @@ export default function CalculosCpmInversion({ disabled = false }) {
               value={formData.rebate}
               onChange={handleChange}
               placeholder="25"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
             <NumericRow
               label="Extra rebate %"
-              name="extraRebate"
-              value={formData.extraRebate}
+              name="extra_rebate"
+              value={formData.extra_rebate}
               onChange={handleChange}
               placeholder="5"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
             <NumericRow
-              label="Ganancia NTP %"
-              name="ganancia"
-              value={formData.ganancia}
+              label="Margen NTP %"
+              name="margen"
+              value={formData.margen}
               onChange={handleChange}
               placeholder="30"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
             <NumericRow
               label="FASED %"
@@ -333,12 +395,12 @@ export default function CalculosCpmInversion({ disabled = false }) {
               value={formData.fased}
               onChange={handleChange}
               placeholder="4"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
           </div>
 
           <ResultadoCopiable
-            id="cpmCliente"
+            id="cpm_cliente"
             label="CPM Cliente"
             value={cpmCliente}
             copiedKey={copiedKey}
@@ -349,27 +411,27 @@ export default function CalculosCpmInversion({ disabled = false }) {
           <label className="flex items-center gap-3 text-sm text-slate-600">
             <input
               type="checkbox"
-              name="incluirCpmTp"
-              checked={formData.incluirCpmTp}
+              name="usar_tp"
+              checked={formData.usar_tp}
               onChange={handleChange}
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
               className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
             />
             Agregar tarifa publicada
           </label>
 
-          {formData.incluirCpmTp && (
+          {formData.usar_tp && (
             <div className="space-y-5">
               <NumericRow
                 label="Tarifa publicada %"
-                name="tarifaPublicada"
-                value={formData.tarifaPublicada}
+                name="tp"
+                value={formData.tp}
                 onChange={handleChange}
                 placeholder="0"
-                disabled={disabled}
+                disabled={disabled || !cpmInicialCargado}
               />
               <ResultadoCopiable
-                id="cpmTp"
+                id="cpm_tp"
                 label="CPM TP"
                 value={cpmTp}
                 copiedKey={copiedKey}
@@ -386,23 +448,24 @@ export default function CalculosCpmInversion({ disabled = false }) {
           <div className="space-y-4">
             <FieldRow label="CPM a utilizar">
               <select
-                name="cpmSeleccionado"
-                value={formData.cpmSeleccionado}
+                name="cpm_fuente"
+                value={formData.cpm_fuente}
                 onChange={handleSeleccionarCpm}
-                disabled={disabled}
+                disabled={disabled || !cpmInicialCargado}
                 className={INPUT_CLASSES}
               >
                 <option value="cliente">CPM Cliente</option>
-                {formData.incluirCpmTp && <option value="tp">CPM TP</option>}
+                {formData.usar_tp && <option value="tp">CPM TP</option>}
+                <option value="manual">Manual</option>
               </select>
             </FieldRow>
             <NumericRow
               label="Valor CPM"
-              name="valorCpmInversion"
-              value={formData.valorCpmInversion}
+              name="valor_cpm"
+              value={valorCpmInput}
               onChange={handleChange}
-              placeholder={formatFormulaNumber(cpmSugerido)}
-              disabled={disabled}
+              placeholder={formatFormulaNumber(valorCpmCalculado)}
+              disabled={disabled || !cpmInicialCargado || formData.cpm_fuente !== 'manual'}
             />
             <NumericRow
               label="Impresiones"
@@ -410,7 +473,7 @@ export default function CalculosCpmInversion({ disabled = false }) {
               value={formData.impresiones}
               onChange={handleChange}
               placeholder="0"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
             <NumericRow
               label="Divisor"
@@ -418,12 +481,12 @@ export default function CalculosCpmInversion({ disabled = false }) {
               value={formData.divisor}
               onChange={handleChange}
               placeholder="1000"
-              disabled={disabled}
+              disabled={disabled || !cpmInicialCargado}
             />
           </div>
 
           <ResultadoCopiable
-            id="inversionEstimada"
+            id="inversion"
             label="Inversión estimada"
             value={inversionEstimada}
             copiedKey={copiedKey}
@@ -432,7 +495,7 @@ export default function CalculosCpmInversion({ disabled = false }) {
           />
 
           <p className="text-xs text-slate-500">
-            CPM × impresiones / {formatFormulaNumber(parseDecimal(formData.divisor) || 1000)}
+            CPM × impresiones / {formatFormulaNumber(divisorFormula)}
           </p>
         </section>
       </div>
