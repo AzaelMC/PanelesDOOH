@@ -1,0 +1,326 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Tarjeta from '../../../components/ui/Tarjeta'
+import {
+  cargarGoogleMapsMarkerPublico,
+  cargarGoogleMapsPublico,
+  obtenerGoogleMapsPublicConfig
+} from '../../../services/googleMapsPublicLoader'
+import { prepararPantallasPropuesta } from '../utils/prepararPantallasPropuesta'
+
+const ZOOM_MAXIMO_INICIAL = 13
+const ZOOM_SELECCION = 16
+
+const MAPA_INICIAL = {
+  center: { lat: 23.6345, lng: -102.5528 },
+  zoom: 5,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: true,
+  clickableIcons: false
+}
+
+function crearContenidoMarcador({ color = '#0f172a', label = 'DO', selected = false } = {}) {
+  const contenedor = document.createElement('div')
+  contenedor.style.position = 'relative'
+  contenedor.style.width = '46px'
+  contenedor.style.height = '56px'
+  contenedor.style.transform = selected ? 'scale(1.06)' : 'scale(1)'
+  contenedor.style.transformOrigin = 'center bottom'
+  contenedor.style.cursor = 'pointer'
+
+  const svgWrapper = document.createElement('div')
+  svgWrapper.innerHTML = `
+    <svg width="46" height="56" viewBox="0 0 46 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M23 2C11.95 2 3 10.95 3 22C3 37 23 54 23 54C23 54 43 37 43 22C43 10.95 34.05 2 23 2Z" fill="${color}" stroke="white" stroke-width="4"/>
+      <circle cx="23" cy="22" r="7" fill="white"/>
+    </svg>
+  `
+
+  const texto = document.createElement('span')
+  texto.textContent = label
+  texto.style.position = 'absolute'
+  texto.style.left = '50%'
+  texto.style.top = '22px'
+  texto.style.transform = 'translate(-50%, -50%)'
+  texto.style.color = selected ? '#ffffff' : '#0f172a'
+  texto.style.fontSize = '11px'
+  texto.style.fontWeight = '700'
+  texto.style.lineHeight = '1'
+  texto.style.pointerEvents = 'none'
+
+  contenedor.appendChild(svgWrapper)
+  contenedor.appendChild(texto)
+
+  return contenedor
+}
+
+function obtenerEtiquetaMarcador(pantalla = {}) {
+  return pantalla.city?.slice(0, 2).toUpperCase() || 'DO'
+}
+
+function formatearImpresiones(value) {
+  if (!Number.isFinite(value)) {
+    return 'Sin dato'
+  }
+
+  return value.toLocaleString('es-MX')
+}
+
+function aplicarEstiloMarcador(markerData, selected) {
+  if (!markerData?.marker) {
+    return
+  }
+
+  markerData.marker.content = crearContenidoMarcador({
+    color: selected ? '#0f172a' : '#334155',
+    label: obtenerEtiquetaMarcador(markerData.pantalla),
+    selected
+  })
+  markerData.marker.zIndex = selected ? 20 : 10
+}
+
+export default function MapaPropuestaPublica({
+  pantallas,
+  pantallaSeleccionada,
+  seleccionarPantalla,
+  centrarSeleccion = false
+}) {
+  const mapaRef = useRef(null)
+  const instanciaMapaRef = useRef(null)
+  const mapsRef = useRef(null)
+  const markerLibraryRef = useRef(null)
+  const marcadoresRef = useRef(new Map())
+  const pantallaSeleccionadaAnteriorRef = useRef(null)
+  const [mapaListo, setMapaListo] = useState(false)
+  const [estado, setEstado] = useState('idle')
+  const [mensajeError, setMensajeError] = useState('')
+
+  const { pantallasValidas, pantallasInvalidas } = useMemo(() => {
+    return prepararPantallasPropuesta(pantallas)
+  }, [pantallas])
+
+  const mensajeCoordenadas = pantallasValidas.length === 0
+    ? 'No hay pantallas con latitud y longitud validas para pintar en el mapa.'
+    : ''
+
+  const estadoVisible = mensajeCoordenadas
+    ? 'sin-coordenadas'
+    : estado
+
+  const mensajeVisible = mensajeCoordenadas || mensajeError
+
+  const pantallaSeleccionadaPreparada = useMemo(() => {
+    if (!pantallaSeleccionada) {
+      return null
+    }
+
+    return prepararPantallasPropuesta([pantallaSeleccionada]).pantallasValidas[0] || null
+  }, [pantallaSeleccionada])
+
+  useEffect(() => {
+    let cancelado = false
+
+    async function inicializarMapa() {
+      try {
+        setEstado('cargando')
+        setMensajeError('')
+
+        const [maps, markerLibrary, mapsConfig] = await Promise.all([
+          cargarGoogleMapsPublico(),
+          cargarGoogleMapsMarkerPublico(),
+          obtenerGoogleMapsPublicConfig()
+        ])
+
+        if (cancelado || !mapaRef.current) {
+          return
+        }
+
+        mapsRef.current = maps
+        markerLibraryRef.current = markerLibrary
+
+        if (!instanciaMapaRef.current) {
+          instanciaMapaRef.current = new maps.Map(mapaRef.current, {
+            ...MAPA_INICIAL,
+            mapId: mapsConfig.mapId
+          })
+        }
+
+        setMapaListo(true)
+        setEstado('listo')
+      } catch (error) {
+        if (!cancelado) {
+          setEstado('error')
+          setMensajeError(error.message || 'No se pudo cargar Google Maps.')
+        }
+      }
+    }
+
+    inicializarMapa()
+
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!mapaListo || !instanciaMapaRef.current || !mapsRef.current || !markerLibraryRef.current) {
+      return undefined
+    }
+
+    const map = instanciaMapaRef.current
+    const maps = mapsRef.current
+    const markerLibrary = markerLibraryRef.current
+
+    marcadoresRef.current.forEach(({ marker }) => {
+      marker.map = null
+    })
+    marcadoresRef.current.clear()
+    pantallaSeleccionadaAnteriorRef.current = null
+
+    if (pantallasValidas.length === 0) {
+      setEstado('listo')
+      return undefined
+    }
+
+    setEstado('cargando')
+
+    const bounds = new maps.LatLngBounds()
+
+    pantallasValidas.forEach((pantalla) => {
+      bounds.extend(pantalla.latLng)
+
+      const marker = new markerLibrary.AdvancedMarkerElement({
+        position: pantalla.latLng,
+        map,
+        title: pantalla.screenName,
+        content: crearContenidoMarcador({
+          color: '#334155',
+          label: obtenerEtiquetaMarcador(pantalla),
+          selected: false
+        }),
+        zIndex: 10,
+        gmpClickable: true
+      })
+
+      marker.addEventListener('gmp-click', () => seleccionarPantalla(pantalla.id))
+
+      marcadoresRef.current.set(pantalla.id, {
+        marker,
+        pantalla
+      })
+    })
+
+    if (pantallasValidas.length === 1) {
+      map.setCenter(pantallasValidas[0].latLng)
+      map.setZoom(15)
+    } else {
+      map.fitBounds(bounds, 72)
+
+      maps.event.addListenerOnce(map, 'idle', () => {
+        if ((map.getZoom() || 0) > ZOOM_MAXIMO_INICIAL) {
+          map.setZoom(ZOOM_MAXIMO_INICIAL)
+        }
+      })
+    }
+
+    setEstado('listo')
+
+    return undefined
+  }, [mapaListo, pantallasValidas, seleccionarPantalla])
+
+  useEffect(() => {
+    if (!mapaListo || !instanciaMapaRef.current) {
+      return
+    }
+
+    const markerAnteriorId = pantallaSeleccionadaAnteriorRef.current
+
+    if (markerAnteriorId && markerAnteriorId !== pantallaSeleccionadaPreparada?.id) {
+      aplicarEstiloMarcador(marcadoresRef.current.get(markerAnteriorId), false)
+    }
+
+    if (!pantallaSeleccionadaPreparada) {
+      pantallaSeleccionadaAnteriorRef.current = null
+      return
+    }
+
+    const markerActual = marcadoresRef.current.get(pantallaSeleccionadaPreparada.id)
+
+    if (!markerActual) {
+      pantallaSeleccionadaAnteriorRef.current = null
+      return
+    }
+
+    aplicarEstiloMarcador(markerActual, true)
+    pantallaSeleccionadaAnteriorRef.current = pantallaSeleccionadaPreparada.id
+
+    if (centrarSeleccion) {
+      instanciaMapaRef.current.panTo(pantallaSeleccionadaPreparada.latLng)
+      instanciaMapaRef.current.setZoom(ZOOM_SELECCION)
+    }
+  }, [mapaListo, pantallaSeleccionadaPreparada, centrarSeleccion])
+
+  useEffect(() => {
+    return () => {
+      marcadoresRef.current.forEach(({ marker }) => {
+        marker.map = null
+      })
+      marcadoresRef.current.clear()
+    }
+  }, [])
+
+  return (
+    <Tarjeta className="flex h-full min-h-[620px] flex-col gap-5">
+      {pantallasInvalidas.length > 0 && (
+        <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {pantallasInvalidas.length} pantalla(s) no se pintaron porque no tienen coordenadas validas.
+        </div>
+      )}
+
+      <div className="relative flex-1 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100">
+        <div ref={mapaRef} className="absolute inset-0" aria-label="Mapa de ubicaciones DOOH" />
+
+        {(estadoVisible === 'cargando' || estadoVisible === 'idle') && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-sm font-medium text-slate-600 backdrop-blur-sm">
+            Cargando Google Maps...
+          </div>
+        )}
+
+        {(estadoVisible === 'error' || estadoVisible === 'sin-coordenadas') && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/90 p-6 text-center backdrop-blur-sm">
+            <div className="max-w-md space-y-3 rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.35)]">
+              <p className="text-base font-semibold text-slate-950">Mapa no disponible</p>
+              <p className="text-sm leading-6 text-slate-600">{mensajeVisible}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="absolute bottom-6 left-6 right-6 rounded-[24px] border border-white/60 bg-white/90 p-5 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.35)] backdrop-blur">
+          {pantallaSeleccionada ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pantalla seleccionada</p>
+                <p className="mt-2 text-xl font-semibold text-slate-950">
+                  {pantallaSeleccionada.screenName}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {pantallaSeleccionada.city} / {pantallaSeleccionada.venueType}
+                </p>
+              </div>
+
+              <div className="grid gap-2 text-sm text-slate-600">
+                <p>Coordenadas: {pantallaSeleccionada.latitude}, {pantallaSeleccionada.longitude}</p>
+                <p>Dimension: {pantallaSeleccionada.dimensions}</p>
+                <p>Impresiones: {formatearImpresiones(pantallaSeleccionada.impressions)}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600">
+              Selecciona una pantalla desde el listado o desde un marcador para inspeccionar su contexto.
+            </p>
+          )}
+        </div>
+      </div>
+    </Tarjeta>
+  )
+}

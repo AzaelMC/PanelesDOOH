@@ -7,6 +7,7 @@ import Tarjeta from '../../../components/ui/Tarjeta'
 import { useAutenticacion } from '../../autenticacion/context/useAutenticacion'
 import BarraOperaciones from '../components/BarraOperaciones'
 import CalculosCpmInversion from '../components/CalculosCpmInversion'
+import ControlesSnapshotCliente from '../../snapshots/components/ControlesSnapshotCliente'
 import BotonAgregarColumna from '../components/BotonAgregarColumna'
 import GrillaTratamiento from '../components/GrillaTratamiento'
 import ResumenPresupuesto from '../components/ResumenPresupuesto'
@@ -376,6 +377,8 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
       <ResumenPresupuesto filas={filas} columnas={columnas} />
 
       <CalculosCpmInversion cotizacionId={cotizacion.id || cotizacionId} disabled={!puedeEditar} />
+
+      <ControlesSnapshotCliente cotizacionId={cotizacion.id || cotizacionId} />
 
       <section className="grid gap-6 2xl:grid-cols-[1fr_auto]">
         <BarraOperaciones

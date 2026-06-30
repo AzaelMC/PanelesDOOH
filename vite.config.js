@@ -34,6 +34,7 @@ function buildApiProxy(mode) {
 }
 
 export default defineConfig(({ mode }) => ({
+  base: mode === 'production' ? '/Dooh/' : '/',
   plugins: [
     react(),
     tailwindcss()
