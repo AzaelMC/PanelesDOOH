@@ -110,14 +110,14 @@ export default function NuevaCotizacion() {
 
   return (
     <div className="ntp-aurora-bg--upload space-y-8">
-      <section className="max-w-3xl space-y-4">
+      <section className="max-w-4xl space-y-4">
         <p className="ntp-page-eyebrow">
           Pipeline de ingesta
         </p>
-        <h2 className="ntp-page-title text-4xl">
+        <h2 className="ntp-page-title max-w-3xl text-5xl leading-[0.92] sm:text-6xl xl:text-[5.25rem]">
           Cargar Nueva Cotizacion
         </h2>
-        <p className="ntp-body-copy text-base leading-8">
+        <p className="ntp-body-copy max-w-2xl text-base leading-7 sm:text-lg">
           El parser se ejecuta completamente en el navegador, detecta la hoja de inventario,
           localiza encabezados y ahora guarda la cotizacion real en la API antes de pasar al tratamiento.
         </p>

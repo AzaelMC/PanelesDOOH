@@ -215,10 +215,10 @@ export default function VistaMapaCliente() {
             </p>
           </div>
 
-          <Tarjeta className="min-w-[260px] space-y-2 bg-slate-950 text-white">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Cliente</p>
-            <p className="text-2xl font-semibold">{cotizacion?.cliente || '-'}</p>
-            <p className="text-sm text-slate-300">
+          <Tarjeta className="min-w-[260px] space-y-2 bg-white/95 text-slate-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Cliente</p>
+            <p className="text-2xl font-semibold text-slate-950">{cotizacion?.cliente || '-'}</p>
+            <p className="text-sm text-slate-600">
               Pantallas visibles: {pantallasFiltradas.length}
             </p>
           </Tarjeta>

@@ -1,40 +1,36 @@
-import Tarjeta from '../../../components/ui/Tarjeta'
 import { useAutenticacion } from '../../autenticacion/context/useAutenticacion'
 import TarjetaModulo from '../components/TarjetaModulo'
+import checkMoradoIcon from '../../../assets/panel-icons/Check_Morado.png'
+import graficaMoradoIcon from '../../../assets/panel-icons/Grafica_Barras_Morado.png'
+import engraneMoradoIcon from '../../../assets/panel-icons/Engrane_Morado.png'
 
 const modulos = [
   {
-    titulo: 'Cargar Nueva Cotizacion',
+    titulo: 'Cargar Nueva Cotización',
     descripcion:
-      'Disparador del pipeline de ingesta. Permite arrastrar o seleccionar el archivo original del proveedor para iniciar el tratamiento operativo.',
-    estado: {
-      status: 'success',
-      label: 'Disponible'
-    },
+      'Selecciona el archivo original del proveedor para iniciar el tratamiento operativo.',
     etiquetaBoton: 'Ir a carga',
-    ruta: '/cotizaciones/nueva'
+    ruta: '/cotizaciones/nueva',
+    icono: checkMoradoIcon,
+    altIcono: 'Ícono de validación para nueva cotización'
   },
   {
     titulo: 'Historial de Cotizaciones',
     descripcion:
-      'Listado indexado de propuestas guardadas con opcion de filtrado rapido por nombre de campana, cliente y responsable creador.',
-    estado: {
-      status: 'info',
-      label: 'Indexado'
-    },
+      'Filtro por nombre de campaña, cliente o responsable creador de la campaña.',
     etiquetaBoton: 'Ver historial',
-    ruta: '/cotizaciones/historial'
+    ruta: '/cotizaciones/historial',
+    icono: graficaMoradoIcon,
+    altIcono: 'Ícono de barras para historial de cotizaciones'
   },
   {
     titulo: 'Usuarios del Sistema',
     descripcion:
-      'Panel interno para revisar credenciales vigentes, auditar actividad operacional y administrar acceso por rol.',
-    estado: {
-      status: 'warning',
-      label: 'Administrador'
-    },
+      'Administra el acceso por rol de cada usuario.',
     etiquetaBoton: 'Ver usuarios',
     ruta: '/usuarios',
+    icono: engraneMoradoIcon,
+    altIcono: 'Ícono de configuración para usuarios del sistema',
     soloAdministrador: true
   }
 ]
@@ -47,35 +43,18 @@ export default function PanelPrincipal() {
   ))
 
   return (
-    <div className="ntp-aurora-bg--panel space-y-8">
-      <section className="space-y-4">
-        <p className="ntp-page-eyebrow">
-          Centro de control administrativo
+    <div className="ntp-aurora-bg--panel space-y-10">
+      <section className="max-w-4xl space-y-4 pt-2">
+        <h2 className="ntp-page-title max-w-3xl text-5xl leading-[0.92] sm:text-6xl xl:text-[5.25rem]">
+          <span className="block">Cotización y</span>
+          <span className="block">Validación Geográfica</span>
+        </h2>
+        <p className="ntp-body-copy max-w-2xl text-base leading-7 sm:text-lg">
+          Crea tu próxima campaña DOOH aquí...
         </p>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl space-y-3">
-            <h2 className="ntp-page-title text-4xl">
-              Opera cotizaciones y validacion geografica desde un unico flujo.
-            </h2>
-            <p className="ntp-body-copy text-base leading-8">
-              El panel ya valida autenticacion real contra la API externa y muestra cada modulo segun
-              el rol de la cuenta activa.
-            </p>
-          </div>
-
-          <Tarjeta className="ntp-glass-card-strong min-w-[260px] space-y-2 text-[var(--ntp-ink)]">
-            <p className="ntp-page-eyebrow">
-              Estado operativo
-            </p>
-            <p className="text-3xl font-semibold">Acceso verificado</p>
-            <p className="ntp-body-copy text-sm">
-              Sesion real, rutas protegidas y visibilidad por rol activas.
-            </p>
-          </Tarjeta>
-        </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {modulosVisibles.map((modulo) => (
           <TarjetaModulo key={modulo.titulo} {...modulo} />
         ))}

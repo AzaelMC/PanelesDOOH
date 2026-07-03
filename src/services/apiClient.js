@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '../config/env'
 
 const AUTH_TOKEN_STORAGE_KEY = 'dooh_auth_token'
+const AUTH_USER_STORAGE_KEY = 'dooh_auth_user'
 
 function getBackendMessage(payload, fallbackMessage) {
   if (payload && typeof payload === 'object') {
@@ -38,9 +39,21 @@ function isHtmlResponseBody(value = '') {
   return normalized.includes('<!doctype html') || normalized.includes('<html')
 }
 
-/**
- * Cliente HTTP base para hacer peticiones a la API externa.
- */
+function handleUnauthorizedSession(endpoint) {
+  if (import.meta.env.DEV) {
+    console.warn('[DOOH API 401]', {
+      endpoint,
+      message: 'Se desactivo temporalmente la redireccion automatica a login para depuracion.'
+    })
+
+    return
+  }
+
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+  window.localStorage.removeItem(AUTH_USER_STORAGE_KEY)
+  window.location.hash = '#/login'
+}
+
 class ApiClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL
@@ -97,7 +110,13 @@ class ApiClient {
       const response = await fetch(finalUrl, {
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token
+            ? {
+                Authorization: `Bearer ${token}`,
+                'X-DOOH-Token': token,
+                'X-Auth-Token': token
+              }
+            : {}),
           ...(options.headers || {})
         },
         ...options
@@ -110,6 +129,10 @@ class ApiClient {
       })
 
       if (!response.ok) {
+        if (response.status === 401) {
+          handleUnauthorizedSession(endpoint)
+        }
+
         throw new Error(getBackendMessage(payload, `HTTP ${response.status}`))
       }
 

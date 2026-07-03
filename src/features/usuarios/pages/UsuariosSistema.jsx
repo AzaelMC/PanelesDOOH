@@ -57,11 +57,11 @@ export default function UsuariosSistema() {
           Gobierno de accesos
         </p>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl space-y-3">
-            <h2 className="ntp-page-title text-4xl">
+          <div className="max-w-4xl space-y-4">
+            <h2 className="ntp-page-title max-w-3xl text-5xl leading-[0.92] sm:text-6xl xl:text-[5.25rem]">
               Usuarios del Sistema
             </h2>
-            <p className="ntp-body-copy text-base leading-8">
+            <p className="ntp-body-copy max-w-2xl text-base leading-7 sm:text-lg">
               Visualiza usuarios reales, revisa el ultimo acceso registrado y monitorea el volumen de cotizaciones creadas por cada perfil.
             </p>
           </div>
