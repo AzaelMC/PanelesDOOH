@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { MarkerClusterer } from '@googlemaps/markerclusterer'
 import Tarjeta from '../../../components/ui/Tarjeta'
 import { cargarGoogleMaps, cargarGoogleMapsMarker, obtenerGoogleMapsConfig } from '../../../services/googleMapsLoader'
 import { prepararPantallasMapa } from '../utils/prepararPantallasMapa'
 
 const ZOOM_MAXIMO_INICIAL = 13
 const ZOOM_SELECCION = 16
+const NTP_PURPLE = '#9E6DF7'
 
 const MAPA_INICIAL = {
   center: { lat: 23.6345, lng: -102.5528 },
@@ -12,51 +14,68 @@ const MAPA_INICIAL = {
   mapTypeControl: false,
   streetViewControl: false,
   fullscreenControl: true,
-  clickableIcons: false
+  zoomControl: true,
+  clickableIcons: false,
+  scrollwheel: false,
+  gestureHandling: 'greedy'
 }
 
-function crearContenidoMarcador({ color = '#0f172a', label = 'DO', selected = false } = {}) {
+function crearContenidoMarcador({ selected = false } = {}) {
   const contenedor = document.createElement('div')
   contenedor.style.position = 'relative'
-  contenedor.style.width = '46px'
-  contenedor.style.height = '56px'
-  contenedor.style.transform = selected ? 'scale(1.06)' : 'scale(1)'
+  contenedor.style.width = selected ? '48px' : '42px'
+  contenedor.style.height = selected ? '58px' : '52px'
+  contenedor.style.transform = selected ? 'scale(1.08)' : 'scale(1)'
   contenedor.style.transformOrigin = 'center bottom'
   contenedor.style.cursor = 'pointer'
+  contenedor.style.filter = selected
+    ? 'drop-shadow(0 12px 18px rgba(65,17,137,0.36))'
+    : 'drop-shadow(0 8px 14px rgba(65,17,137,0.24))'
+
+  const size = selected ? 48 : 42
+  const height = selected ? 58 : 52
+  const center = size / 2
+  const circleY = selected ? 22 : 20
+  const circleR = selected ? 8 : 7
+  const dotR = selected ? 3.6 : 3.2
 
   const svgWrapper = document.createElement('div')
   svgWrapper.innerHTML = `
-    <svg width="46" height="56" viewBox="0 0 46 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M23 2C11.95 2 3 10.95 3 22C3 37 23 54 23 54C23 54 43 37 43 22C43 10.95 34.05 2 23 2Z" fill="${color}" stroke="white" stroke-width="4"/>
-      <circle cx="23" cy="22" r="7" fill="white"/>
+    <svg width="${size}" height="${height}" viewBox="0 0 ${size} ${height}" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M${center} 2.5C${center - 11.5} 2.5 ${center - 20} 11 ${center - 20} ${circleY + 1}C${center - 20} ${circleY + 16} ${center} ${height - 3} ${center} ${height - 3}C${center} ${height - 3} ${center + 20} ${circleY + 16} ${center + 20} ${circleY + 1}C${center + 20} 11 ${center + 11.5} 2.5 ${center} 2.5Z" fill="${NTP_PURPLE}" stroke="white" stroke-width="4"/>
+      <circle cx="${center}" cy="${circleY}" r="${circleR}" fill="white"/>
+      <circle cx="${center}" cy="${circleY}" r="${dotR}" fill="${NTP_PURPLE}"/>
     </svg>
   `
 
-  const texto = document.createElement('span')
-  texto.textContent = label
-  texto.style.position = 'absolute'
-  texto.style.left = '50%'
-  texto.style.top = '22px'
-  texto.style.transform = 'translate(-50%, -50%)'
-  texto.style.color = selected ? '#ffffff' : '#0f172a'
-  texto.style.fontSize = '11px'
-  texto.style.fontWeight = '700'
-  texto.style.lineHeight = '1'
-  texto.style.pointerEvents = 'none'
-
   contenedor.appendChild(svgWrapper)
-  contenedor.appendChild(texto)
 
   return contenedor
 }
 
-function obtenerEtiquetaMarcador(pantalla = {}) {
-  return pantalla.city?.slice(0, 2).toUpperCase() || 'DO'
+
+function crearContenidoCluster(count) {
+  const contenedor = document.createElement('div')
+  contenedor.style.width = '48px'
+  contenedor.style.height = '48px'
+  contenedor.style.borderRadius = '999px'
+  contenedor.style.background = NTP_PURPLE
+  contenedor.style.color = 'white'
+  contenedor.style.display = 'flex'
+  contenedor.style.alignItems = 'center'
+  contenedor.style.justifyContent = 'center'
+  contenedor.style.fontWeight = '800'
+  contenedor.style.fontSize = count > 99 ? '0.78rem' : '0.95rem'
+  contenedor.style.border = '4px solid rgba(255,255,255,0.92)'
+  contenedor.style.boxShadow = '0 16px 30px -18px rgba(65,17,137,0.65)'
+  contenedor.textContent = String(count)
+
+  return contenedor
 }
 
 function formatearImpresiones(value) {
   if (!Number.isFinite(value)) {
-    return 'Sin dato'
+    return ''
   }
 
   return value.toLocaleString('es-MX')
@@ -67,11 +86,7 @@ function aplicarEstiloMarcador(markerData, selected) {
     return
   }
 
-  markerData.marker.content = crearContenidoMarcador({
-    color: selected ? '#0f172a' : '#334155',
-    label: obtenerEtiquetaMarcador(markerData.pantalla),
-    selected
-  })
+  markerData.marker.content = crearContenidoMarcador({ selected })
   markerData.marker.zIndex = selected ? 20 : 10
 }
 
@@ -79,12 +94,16 @@ export default function LienzoMapaPlaceholder({
   pantallas,
   pantallaSeleccionada,
   seleccionarPantalla,
-  centrarSeleccion = false
+  centrarSeleccion = false,
+  cargarMaps = cargarGoogleMaps,
+  cargarMarker = cargarGoogleMapsMarker,
+  obtenerMapsConfig = obtenerGoogleMapsConfig
 }) {
   const mapaRef = useRef(null)
   const instanciaMapaRef = useRef(null)
   const mapsRef = useRef(null)
   const markerLibraryRef = useRef(null)
+  const clustererRef = useRef(null)
   const marcadoresRef = useRef(new Map())
   const pantallaSeleccionadaAnteriorRef = useRef(null)
   const [mapaListo, setMapaListo] = useState(false)
@@ -95,15 +114,13 @@ export default function LienzoMapaPlaceholder({
     return prepararPantallasMapa(pantallas)
   }, [pantallas])
 
-  const mensajeCoordenadas = pantallasValidas.length === 0
-    ? 'No hay pantallas con latitud y longitud validas para pintar en el mapa.'
-    : ''
-
-  const estadoVisible = mensajeCoordenadas
+  const estadoVisible = pantallasValidas.length === 0
     ? 'sin-coordenadas'
     : estado
 
-  const mensajeVisible = mensajeCoordenadas || mensajeError
+  const mensajeVisible = estadoVisible === 'sin-coordenadas'
+    ? 'Sin coordenadas'
+    : mensajeError
 
   const pantallaSeleccionadaPreparada = useMemo(() => {
     if (!pantallaSeleccionada) {
@@ -122,9 +139,9 @@ export default function LienzoMapaPlaceholder({
         setMensajeError('')
 
         const [maps, markerLibrary, mapsConfig] = await Promise.all([
-          cargarGoogleMaps(),
-          cargarGoogleMapsMarker(),
-          obtenerGoogleMapsConfig()
+          cargarMaps(),
+          cargarMarker(),
+          obtenerMapsConfig()
         ])
 
         if (cancelado || !mapaRef.current) {
@@ -137,16 +154,22 @@ export default function LienzoMapaPlaceholder({
         if (!instanciaMapaRef.current) {
           instanciaMapaRef.current = new maps.Map(mapaRef.current, {
             ...MAPA_INICIAL,
-            mapId: mapsConfig.mapId
+            mapId: mapsConfig.mapId,
+            zoomControlOptions: {
+              position: maps.ControlPosition.RIGHT_BOTTOM
+            },
+            fullscreenControlOptions: {
+              position: maps.ControlPosition.LEFT_BOTTOM
+            }
           })
         }
 
         setMapaListo(true)
         setEstado('listo')
-      } catch (error) {
+      } catch {
         if (!cancelado) {
           setEstado('error')
-          setMensajeError(error.message || 'No se pudo cargar Google Maps.')
+          setMensajeError('No se pudo cargar el mapa')
         }
       }
     }
@@ -156,7 +179,7 @@ export default function LienzoMapaPlaceholder({
     return () => {
       cancelado = true
     }
-  }, [])
+  }, [cargarMaps, cargarMarker, obtenerMapsConfig])
 
   useEffect(() => {
     if (!mapaListo || !instanciaMapaRef.current || !mapsRef.current || !markerLibraryRef.current) {
@@ -167,6 +190,9 @@ export default function LienzoMapaPlaceholder({
     const maps = mapsRef.current
     const markerLibrary = markerLibraryRef.current
 
+    clustererRef.current?.clearMarkers()
+    clustererRef.current = null
+
     marcadoresRef.current.forEach(({ marker }) => {
       marker.map = null
     })
@@ -174,36 +200,45 @@ export default function LienzoMapaPlaceholder({
     pantallaSeleccionadaAnteriorRef.current = null
 
     if (pantallasValidas.length === 0) {
-      setEstado('listo')
       return undefined
     }
 
-    setEstado('cargando')
-
     const bounds = new maps.LatLngBounds()
+
+    const markers = []
 
     pantallasValidas.forEach((pantalla) => {
       bounds.extend(pantalla.latLng)
 
       const marker = new markerLibrary.AdvancedMarkerElement({
         position: pantalla.latLng,
-        map,
         title: pantalla.screenName,
-        content: crearContenidoMarcador({
-          color: '#334155',
-          label: obtenerEtiquetaMarcador(pantalla),
-          selected: false
-        }),
+        content: crearContenidoMarcador({ selected: false }),
         zIndex: 10,
         gmpClickable: true
       })
 
       marker.addEventListener('gmp-click', () => seleccionarPantalla(pantalla.id))
 
+      markers.push(marker)
+
       marcadoresRef.current.set(pantalla.id, {
         marker,
         pantalla
       })
+    })
+
+    clustererRef.current = new MarkerClusterer({
+      map,
+      markers,
+      renderer: {
+        render: ({ count, position }) => new markerLibrary.AdvancedMarkerElement({
+          position,
+          content: crearContenidoCluster(count),
+          zIndex: 30 + count,
+          title: `${count} pantallas`
+        })
+      }
     })
 
     if (pantallasValidas.length === 1) {
@@ -218,8 +253,6 @@ export default function LienzoMapaPlaceholder({
         }
       })
     }
-
-    setEstado('listo')
 
     return undefined
   }, [mapaListo, pantallasValidas, seleccionarPantalla])
@@ -257,82 +290,69 @@ export default function LienzoMapaPlaceholder({
   }, [mapaListo, pantallaSeleccionadaPreparada, centrarSeleccion])
 
   useEffect(() => {
+    const marcadores = marcadoresRef.current
+
     return () => {
-      marcadoresRef.current.forEach(({ marker }) => {
+      clustererRef.current?.clearMarkers()
+      clustererRef.current = null
+
+      marcadores.forEach(({ marker }) => {
         marker.map = null
       })
-      marcadoresRef.current.clear()
+      marcadores.clear()
     }
   }, [])
 
   return (
     <Tarjeta className="flex h-full min-h-[620px] flex-col gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold text-slate-950">Validacion Geografica</h3>
-          <p className="text-sm text-slate-500">
-            Mapa interactivo con ubicaciones DOOH desde latitud y longitud.
-          </p>
-        </div>
-
-        {pantallaSeleccionada && (
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Seleccion</p>
-            <p className="mt-2 font-semibold text-slate-950">{pantallaSeleccionada.screenName}</p>
-            <p className="text-sm text-slate-500">{pantallaSeleccionada.city}</p>
-          </div>
-        )}
-      </div>
-
       {pantallasInvalidas.length > 0 && (
         <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {pantallasInvalidas.length} pantalla(s) no se pintaron porque no tienen coordenadas validas.
+          Sin coordenadas: {pantallasInvalidas.length}
         </div>
       )}
 
-      <div className="relative flex-1 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100">
+      <div className="relative flex-1 overflow-hidden rounded-[28px] border border-[rgba(var(--ntp-purple-brand-rgb),0.16)] bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
         <div ref={mapaRef} className="absolute inset-0" aria-label="Mapa de ubicaciones DOOH" />
 
         {(estadoVisible === 'cargando' || estadoVisible === 'idle') && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-sm font-medium text-slate-600 backdrop-blur-sm">
-            Cargando Google Maps...
+            Cargando mapa
           </div>
         )}
 
         {(estadoVisible === 'error' || estadoVisible === 'sin-coordenadas') && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/90 p-6 text-center backdrop-blur-sm">
-            <div className="max-w-md space-y-3 rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.35)]">
-              <p className="text-base font-semibold text-slate-950">Mapa no disponible</p>
-              <p className="text-sm leading-6 text-slate-600">{mensajeVisible}</p>
+            <div className="max-w-md rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.35)]">
+              <p className="text-base font-semibold text-slate-950">{mensajeVisible}</p>
             </div>
           </div>
         )}
 
-        <div className="absolute bottom-6 left-6 right-6 rounded-[24px] border border-white/60 bg-white/90 p-5 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.35)] backdrop-blur">
-          {pantallaSeleccionada ? (
+        {pantallaSeleccionada && (
+          <div className="absolute left-4 right-4 top-4 rounded-[24px] border border-white/60 bg-white/90 p-5 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.35)] backdrop-blur sm:left-6 sm:right-6 sm:top-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pantalla seleccionada</p>
                 <p className="mt-2 text-xl font-semibold text-slate-950">
                   {pantallaSeleccionada.screenName}
                 </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {pantallaSeleccionada.city} / {pantallaSeleccionada.venueType}
-                </p>
+                {(pantallaSeleccionada.city || pantallaSeleccionada.venueType) && (
+                  <p className="mt-1 text-sm text-slate-600">
+                    {[pantallaSeleccionada.city, pantallaSeleccionada.venueType].filter(Boolean).join(' / ')}
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-2 text-sm text-slate-600">
                 <p>Coordenadas: {pantallaSeleccionada.latitude}, {pantallaSeleccionada.longitude}</p>
-                <p>Dimension: {pantallaSeleccionada.dimensions}</p>
-                <p>Impresiones: {formatearImpresiones(pantallaSeleccionada.impressions)}</p>
+                {pantallaSeleccionada.dimensions ? <p>Dimension: {pantallaSeleccionada.dimensions}</p> : null}
+                {formatearImpresiones(pantallaSeleccionada.impressions) ? (
+                  <p>Impresiones: {formatearImpresiones(pantallaSeleccionada.impressions)}</p>
+                ) : null}
               </div>
             </div>
-          ) : (
-            <p className="text-sm text-slate-600">
-              Selecciona una pantalla desde el listado o desde un marcador para inspeccionar su contexto.
-            </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </Tarjeta>
   )

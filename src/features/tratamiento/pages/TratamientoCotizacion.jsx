@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { AUTH_MOCK_ENABLED } from '../../../config/env'
 import Boton from '../../../components/ui/Boton'
 import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
 import { useAutenticacion } from '../../autenticacion/context/useAutenticacion'
-import BarraOperaciones from '../components/BarraOperaciones'
 import CalculosCpmInversion from '../components/CalculosCpmInversion'
-import ControlesSnapshotCliente from '../../snapshots/components/ControlesSnapshotCliente'
-import BotonAgregarColumna from '../components/BotonAgregarColumna'
+import ControlesLinkCliente from '../../propuesta/components/ControlesLinkCliente'
 import GrillaTratamiento from '../components/GrillaTratamiento'
 import ResumenPresupuesto from '../components/ResumenPresupuesto'
 import {
   actualizarCotizacion,
   obtenerCotizacionPorId
 } from '../../cotizaciones/services/cotizacionesApi'
-import { aplicarOperacionMatematica } from '../utils/aplicarOperacionMatematica'
+import {
+  obtenerStatusEstadoPropuesta,
+  obtenerTextoEstadoOperativo,
+  obtenerTextoEstadoPropuesta,
+  tieneMensajeNuevo
+} from '../../cotizaciones/utils/estadoPropuesta'
+import { escucharAlertasChat, escucharChatLeido } from '../../chat/utils/eventosChat'
 
 function formatDate(date) {
   if (!date) {
@@ -51,20 +54,20 @@ function resolverPuedeEditar(usuario, cotizacion) {
   return String(cotizacion.usuarioCreadorId) === String(usuario.id)
 }
 
+function obtenerStatusOperativo(estatus = '') {
+  const normalized = String(estatus || '').trim().toLowerCase()
+
+  if (normalized.includes('archiv')) {
+    return 'inactive'
+  }
+
+  return 'pending'
+}
+
 function applyCotizacionToState(cotizacion, setCotizacion, setColumnas, setFilas) {
   setCotizacion(cotizacion)
   setColumnas(cotizacion.columnas || [])
   setFilas(cotizacion.ubicaciones || [])
-}
-
-function buildOperacionColumnKey(label = '') {
-  return label
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '_')
 }
 
 function buildPantallaResumenTexto(cotizacion, filas) {
@@ -74,7 +77,7 @@ function buildPantallaResumenTexto(cotizacion, filas) {
   return `${totalActivas} activas de ${totalPantallas}`
 }
 
-function clonarSnapshotFilas(filas = []) {
+function clonarFilas(filas = []) {
   return filas.map((fila) => ({
     ...fila,
     errors: Array.isArray(fila.errors) ? [...fila.errors] : []
@@ -110,7 +113,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
         }
 
         applyCotizacionToState(detalle, setCotizacion, setColumnas, setFilas)
-        filasOriginalesRef.current = clonarSnapshotFilas(detalle.ubicaciones || [])
+        filasOriginalesRef.current = clonarFilas(detalle.ubicaciones || [])
       } catch (loadError) {
         if (!active) {
           return
@@ -135,39 +138,45 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
     }
   }, [cotizacionId])
 
+  useEffect(() => {
+    const limpiarAlertas = escucharAlertasChat(({ alertas = [] }) => {
+      const tieneAlerta = (Array.isArray(alertas) ? alertas : []).some(
+        (alerta) => String(alerta.cotizacionId || alerta.cotizacion_id) === String(cotizacionId)
+      )
+
+      setCotizacion((current) => current
+        ? {
+            ...current,
+            tieneMensajeNuevo: tieneAlerta,
+            tiene_mensaje_nuevo: tieneAlerta
+          }
+        : current)
+    })
+
+    const limpiarLeido = escucharChatLeido(({ cotizacionId: cotizacionLeidaId }) => {
+      if (String(cotizacionLeidaId) !== String(cotizacionId)) {
+        return
+      }
+
+      setCotizacion((current) => current
+        ? {
+            ...current,
+            tieneMensajeNuevo: false,
+            tiene_mensaje_nuevo: false
+          }
+        : current)
+    })
+
+    return () => {
+      limpiarAlertas()
+      limpiarLeido()
+    }
+  }, [cotizacionId])
+
   const puedeEditar = useMemo(
     () => resolverPuedeEditar(usuario, cotizacion),
     [cotizacion, usuario]
   )
-
-  const columnasNumericas = useMemo(
-    () =>
-      columnas.filter((columna) =>
-        filas.some((fila) => Number.isFinite(Number(fila[columna.key])))
-      ),
-    [columnas, filas]
-  )
-
-  const handleAgregarColumna = ({ key, label }) => {
-    setMensajeExito('')
-    setHayCambios(true)
-    setColumnas((current) => [
-      ...current,
-      {
-        key,
-        label,
-        editable: true,
-        origen: 'manual'
-      }
-    ])
-
-    setFilas((current) =>
-      current.map((fila) => ({
-        ...fila,
-        [key]: ''
-      }))
-    )
-  }
 
   const handleAlternarFila = (rowId) => {
     setMensajeExito('')
@@ -183,48 +192,6 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
           : fila
       )
     )
-  }
-
-  const handleActualizarCelda = (rowId, columnKey, value) => {
-    setMensajeExito('')
-    setHayCambios(true)
-    setFilas((current) =>
-      current.map((fila) =>
-        String(fila.id) === String(rowId)
-          ? { ...fila, [columnKey]: value }
-          : fila
-      )
-    )
-  }
-
-  const handleAplicarOperacion = (payload) => {
-    const columnaResultadoKey = buildOperacionColumnKey(payload.columnaResultado)
-
-    if (!columnaResultadoKey) {
-      return
-    }
-
-    const filasActualizadas = aplicarOperacionMatematica({
-      ...payload,
-      filas,
-      columnaResultado: columnaResultadoKey
-    })
-
-    if (!columnas.some((columna) => columna.key === columnaResultadoKey)) {
-      setColumnas((current) => [
-        ...current,
-        {
-          key: columnaResultadoKey,
-          label: payload.columnaResultado.trim(),
-          editable: false,
-          origen: 'calculada'
-        }
-      ])
-    }
-
-    setMensajeExito('')
-    setHayCambios(true)
-    setFilas(filasActualizadas)
   }
 
   const handleGuardarCambios = async () => {
@@ -252,7 +219,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
       const siguienteCotizacion = response.cotizacion || await obtenerCotizacionPorId(cotizacion.id || cotizacionId)
 
       applyCotizacionToState(siguienteCotizacion, setCotizacion, setColumnas, setFilas)
-      filasOriginalesRef.current = clonarSnapshotFilas(siguienteCotizacion.ubicaciones || [])
+      filasOriginalesRef.current = clonarFilas(siguienteCotizacion.ubicaciones || [])
       setHayCambios(false)
       setMensajeExito(response.mensaje || 'Cambios guardados correctamente.')
     } catch (saveError) {
@@ -276,13 +243,7 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
   if (error && !cotizacion) {
     return (
       <Tarjeta className="space-y-4 text-center">
-        <p className="text-lg font-medium text-slate-900">No fue posible abrir la cotizacion.</p>
-        <p className="text-sm text-rose-700">{error}</p>
-        {!AUTH_MOCK_ENABLED && (
-          <p className="text-sm text-slate-500">
-            En modo real no se aplica fallback silencioso a mocks.
-          </p>
-        )}
+        <p className="text-sm font-medium text-rose-700">{error}</p>
       </Tarjeta>
     )
   }
@@ -307,7 +268,6 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
             </div>
 
             <div className="flex flex-col items-end gap-3">
-              <EtiquetaEstado status="pending">{cotizacion.estado || 'borrador'}</EtiquetaEstado>
               <Boton
                 onClick={handleGuardarCambios}
                 loading={guardando}
@@ -364,50 +324,48 @@ function TratamientoCotizacionContenido({ cotizacionId }) {
           )}
         </Tarjeta>
 
-        <Tarjeta className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-950">Observaciones del flujo</h3>
-          <ul className="space-y-3 text-sm leading-7 text-slate-600">
-            <li>La cotizacion se carga desde backend por `cotizacion_id`.</li>
-            <li>Las ediciones locales se guardan por lotes, enviando solo los cambios detectados en pantallas.</li>
-            <li>{puedeEditar ? 'Tu perfil puede editar esta cotizacion.' : 'Tu perfil solo tiene acceso de lectura en esta cotizacion.'}</li>
-          </ul>
+        <Tarjeta className="space-y-5">
+          <h3 className="text-lg font-semibold text-slate-950">Estados</h3>
+
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Estado de cotización</p>
+              <EtiquetaEstado status={obtenerStatusOperativo(cotizacion.estatus || cotizacion.estado)}>
+                {obtenerTextoEstadoOperativo(cotizacion.estatus || cotizacion.estado)}
+              </EtiquetaEstado>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Estado de propuesta</p>
+              <EtiquetaEstado status={obtenerStatusEstadoPropuesta(cotizacion.estadoPropuesta || cotizacion.estado_propuesta)}>
+                {obtenerTextoEstadoPropuesta(cotizacion.estadoPropuesta || cotizacion.estado_propuesta)}
+              </EtiquetaEstado>
+            </div>
+
+            {tieneMensajeNuevo(cotizacion) && (
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Chat</p>
+                <EtiquetaEstado status="info">Mensaje nuevo</EtiquetaEstado>
+              </div>
+            )}
+          </div>
         </Tarjeta>
       </section>
 
-      <ResumenPresupuesto filas={filas} columnas={columnas} />
+      <ResumenPresupuesto filas={filas} />
 
-      <CalculosCpmInversion cotizacionId={cotizacion.id || cotizacionId} disabled={!puedeEditar} />
+      <CalculosCpmInversion
+        cotizacionId={cotizacion.id || cotizacionId}
+        presupuestoClienteInicial={cotizacion.presupuestoCliente}
+        disabled={!puedeEditar}
+      />
 
-      <ControlesSnapshotCliente cotizacionId={cotizacion.id || cotizacionId} />
-
-      <section className="grid gap-6 2xl:grid-cols-[1fr_auto]">
-        <BarraOperaciones
-          columnasNumericas={columnasNumericas}
-          onAplicarOperacion={handleAplicarOperacion}
-          disabled={!puedeEditar}
-        />
-        <div className="2xl:min-w-[320px]">
-          <Tarjeta className="h-full space-y-5">
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-slate-950">Curaduria de columnas</h3>
-              <p className="text-sm text-slate-500">
-                Agrega columnas manuales para observaciones o calculos operativos sin tocar el archivo fuente.
-              </p>
-            </div>
-            <BotonAgregarColumna
-              columnasExistentes={columnas}
-              onAgregarColumna={handleAgregarColumna}
-              disabled={!puedeEditar}
-            />
-          </Tarjeta>
-        </div>
-      </section>
+      <ControlesLinkCliente cotizacionId={cotizacion.id || cotizacionId} />
 
       <GrillaTratamiento
         columnas={columnas}
         filas={filas}
         onAlternarFila={handleAlternarFila}
-        onActualizarCelda={handleActualizarCelda}
         editable={puedeEditar}
       />
     </div>

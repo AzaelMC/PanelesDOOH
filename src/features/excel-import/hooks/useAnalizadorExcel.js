@@ -216,7 +216,7 @@ export function useAnalizadorExcel() {
     }
   }
 
-  const prepararCotizacion = ({ nombreCampana, cliente }) => {
+  const prepararCotizacion = ({ nombreCampana, cliente, fechaInicio, fechaTermino, tipoCompra, presupuestoCliente }) => {
     if (!archivoProcesado) {
       throw new Error('No hay archivo cargado para preparar una cotizacion temporal.')
     }
@@ -227,7 +227,11 @@ export function useAnalizadorExcel() {
         hojaPreferida: nombreHojaSeleccionada
       },
       nombreCampana,
-      cliente
+      cliente,
+      fechaInicio,
+      fechaTermino,
+      tipoCompra,
+      presupuestoCliente
     })
 
     setCotizacionTemporal(resultado.cotizacionTemporal)

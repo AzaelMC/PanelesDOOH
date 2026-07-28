@@ -2,6 +2,7 @@ import apiClient from '../../../services/apiClient'
 import { calcularCpmInversion, parseNumeroOpcional } from '../utils/calcularCpmInversion'
 
 export const CPM_ESTADO_INICIAL = {
+  presupuesto_cliente: '',
   cpm_base: '',
   rebate: '',
   extra_rebate: '',
@@ -11,20 +12,29 @@ export const CPM_ESTADO_INICIAL = {
   tp: '',
   cpm_fuente: 'cliente',
   valor_cpm: '',
-  impresiones: '',
-  divisor: '1000'
+  divisor: '1000',
+  impresiones_estimadas: ''
 }
 
 const CAMPOS_NUMERICOS_OPCIONALES = [
+  'presupuesto_cliente',
   'cpm_base',
   'rebate',
   'extra_rebate',
   'margen',
   'fased',
+  'total',
+  'cpm_cliente',
   'tp',
+  'cpm_tp',
   'valor_cpm',
-  'impresiones'
+  'divisor',
+  'impresiones_estimadas'
 ]
+
+function pickFirst(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '')
+}
 
 function numeroAInput(valor) {
   if (valor === null || valor === undefined || valor === '') {
@@ -42,12 +52,34 @@ function normalizarFuente(valor) {
   return ['cliente', 'tp', 'manual'].includes(valor) ? valor : 'cliente'
 }
 
-export function mapearCpmApiAEstado(cpm) {
-  if (!cpm) {
-    return { ...CPM_ESTADO_INICIAL }
+function extraerCpmDesdeRespuesta(response) {
+  const cpm = response?.cpm ?? null
+  const presupuestoCliente = pickFirst(
+    cpm?.presupuesto_cliente,
+    response?.cotizacion?.presupuesto_cliente,
+    response?.resumen_estado?.presupuesto_cliente
+  )
+
+  if (!cpm && presupuestoCliente === undefined) {
+    return null
   }
 
   return {
+    ...(cpm || {}),
+    presupuesto_cliente: presupuestoCliente ?? null
+  }
+}
+
+export function mapearCpmApiAEstado(cpm, { presupuestoClienteInicial = '' } = {}) {
+  if (!cpm) {
+    return {
+      ...CPM_ESTADO_INICIAL,
+      presupuesto_cliente: numeroAInput(presupuestoClienteInicial)
+    }
+  }
+
+  return {
+    presupuesto_cliente: numeroAInput(pickFirst(cpm.presupuesto_cliente, presupuestoClienteInicial)),
     cpm_base: numeroAInput(cpm.cpm_base),
     rebate: numeroAInput(cpm.rebate),
     extra_rebate: numeroAInput(cpm.extra_rebate),
@@ -57,14 +89,15 @@ export function mapearCpmApiAEstado(cpm) {
     tp: numeroAInput(cpm.tp),
     cpm_fuente: normalizarFuente(cpm.cpm_fuente),
     valor_cpm: numeroAInput(cpm.valor_cpm),
-    impresiones: numeroAInput(cpm.impresiones),
-    divisor: numeroAInput(cpm.divisor) || '1000'
+    divisor: numeroAInput(cpm.divisor) || '1000',
+    impresiones_estimadas: numeroAInput(cpm.impresiones_estimadas)
   }
 }
 
 export function construirPayloadCpm(cotizacionId, estado) {
   const datosBase = {
     cotizacion_id: Number(cotizacionId),
+    presupuesto_cliente: estado.presupuesto_cliente,
     cpm_base: estado.cpm_base,
     rebate: estado.rebate,
     extra_rebate: estado.extra_rebate,
@@ -74,7 +107,6 @@ export function construirPayloadCpm(cotizacionId, estado) {
     tp: estado.usar_tp ? estado.tp : null,
     cpm_fuente: normalizarFuente(estado.cpm_fuente),
     valor_cpm: estado.valor_cpm,
-    impresiones: estado.impresiones,
     divisor: estado.divisor === '' || estado.divisor === null || estado.divisor === undefined
       ? 1000
       : estado.divisor
@@ -107,10 +139,10 @@ export function construirPayloadCpm(cotizacionId, estado) {
 
 export async function obtenerCpmCotizacion(cotizacionId) {
   const response = await apiClient.get(`/cpm.php?cotizacion_id=${encodeURIComponent(cotizacionId)}`)
-  return response?.cpm ?? null
+  return extraerCpmDesdeRespuesta(response)
 }
 
 export async function guardarCpmCotizacion(datosCpm) {
   const response = await apiClient.post('/cpm.php', datosCpm)
-  return response?.cpm ?? null
+  return extraerCpmDesdeRespuesta(response)
 }

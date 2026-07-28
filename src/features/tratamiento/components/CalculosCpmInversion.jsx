@@ -7,7 +7,7 @@ import {
   mapearCpmApiAEstado,
   obtenerCpmCotizacion
 } from '../services/cpmApi'
-import { calcularCpmInversion, parseNumeroOpcional } from '../utils/calcularCpmInversion'
+import { calcularCpmInversion } from '../utils/calcularCpmInversion'
 
 const INPUT_CLASSES =
   'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500'
@@ -22,6 +22,14 @@ function formatCurrency(value) {
     currency: 'MXN',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
+  }).format(safeValue)
+}
+
+function formatNumber(value) {
+  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0
+
+  return new Intl.NumberFormat('es-MX', {
+    maximumFractionDigits: 4
   }).format(safeValue)
 }
 
@@ -117,15 +125,24 @@ function NumericRow({ label, name, value, onChange, placeholder, disabled = fals
   )
 }
 
-function ResultadoCopiable({ id, label, value, copiedKey, onCopy, disabled = false }) {
-  const formattedValue = formatCurrency(value)
+function ResultadoCopiable({
+  id,
+  label,
+  value,
+  copiedKey,
+  onCopy,
+  disabled = false,
+  formatter = formatCurrency,
+  copyDecimals = 2
+}) {
+  const formattedValue = formatter(value)
   const copied = copiedKey === id
 
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-950 px-5 py-5 text-white shadow-[0_18px_32px_-24px_rgba(15,23,42,0.75)]">
+    <div className="rounded-3xl border border-[rgba(var(--ntp-purple-brand-rgb),0.28)] bg-[var(--ntp-grape-button)] px-5 py-5 text-white shadow-[0_18px_32px_-24px_rgba(var(--ntp-grape-button-rgb),0.72)]">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
             {label}
           </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -134,7 +151,7 @@ function ResultadoCopiable({ id, label, value, copiedKey, onCopy, disabled = fal
         </div>
         <button
           type="button"
-          onClick={() => onCopy(id, value)}
+          onClick={() => onCopy(id, value, copyDecimals)}
           disabled={disabled}
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white shadow-sm transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={`Copiar ${label}`}
@@ -147,7 +164,7 @@ function ResultadoCopiable({ id, label, value, copiedKey, onCopy, disabled = fal
   )
 }
 
-export default function CalculosCpmInversion({ cotizacionId, disabled = false }) {
+export default function CalculosCpmInversion({ cotizacionId, presupuestoClienteInicial = '', disabled = false }) {
   const [formData, setFormData] = useState(CPM_ESTADO_INICIAL)
   const [cpmInicialCargado, setCpmInicialCargado] = useState(false)
   const [errorCpm, setErrorCpm] = useState('')
@@ -165,9 +182,8 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
 
   const cpmCliente = calculos.cpm_cliente ?? 0
   const cpmTp = calculos.cpm_tp ?? 0
-  const inversionEstimada = calculos.inversion ?? 0
+  const impresionesEstimadas = calculos.impresiones_estimadas ?? 0
   const valorCpmCalculado = calculos.valor_cpm ?? 0
-  const divisorFormula = parseNumeroOpcional(formData.divisor) || 1000
   const valorCpmInput = formData.cpm_fuente === 'manual'
     ? formData.valor_cpm
     : formatInputNumber(calculos.valor_cpm)
@@ -187,7 +203,7 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
 
     async function cargarCpm() {
       if (!cotizacionId) {
-        setFormData({ ...CPM_ESTADO_INICIAL })
+        setFormData(mapearCpmApiAEstado(null, { presupuestoClienteInicial }))
         setCpmInicialCargado(true)
         return
       }
@@ -208,7 +224,7 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
           return
         }
 
-        const siguienteEstado = mapearCpmApiAEstado(registro)
+        const siguienteEstado = mapearCpmApiAEstado(registro, { presupuestoClienteInicial })
         setFormData(siguienteEstado)
         ultimoPayloadPersistidoRef.current = JSON.stringify(
           construirPayloadCpm(cotizacionId, siguienteEstado)
@@ -218,8 +234,8 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
           return
         }
 
-        setFormData({ ...CPM_ESTADO_INICIAL })
-        setErrorCpm(loadError.message || 'No fue posible cargar CPM e inversion.')
+        setFormData(mapearCpmApiAEstado(null, { presupuestoClienteInicial }))
+        setErrorCpm(loadError.message || 'No fue posible cargar CPM e Impresiones.')
       } finally {
         if (active) {
           setCpmInicialCargado(true)
@@ -232,7 +248,7 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
     return () => {
       active = false
     }
-  }, [cotizacionId])
+  }, [cotizacionId, presupuestoClienteInicial])
 
   useEffect(() => {
     if (!cpmInicialCargado || disabled || !cotizacionId || !usuarioModificoCpmRef.current) {
@@ -253,14 +269,14 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
     autosaveTimeoutRef.current = setTimeout(async () => {
       try {
         const registroGuardado = await guardarCpmCotizacion(payload)
-        const estadoPersistido = mapearCpmApiAEstado(registroGuardado)
+        const estadoPersistido = mapearCpmApiAEstado(registroGuardado, { presupuestoClienteInicial })
 
         ultimoPayloadPersistidoRef.current = JSON.stringify(
           construirPayloadCpm(cotizacionId, estadoPersistido)
         )
         setErrorCpm('')
       } catch (saveError) {
-        setErrorCpm(saveError.message || 'No fue posible guardar CPM e inversion.')
+        setErrorCpm(saveError.message || 'No fue posible guardar CPM e Impresiones.')
       }
     }, AUTOSAVE_DELAY_MS)
 
@@ -269,7 +285,7 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
         clearTimeout(autosaveTimeoutRef.current)
       }
     }
-  }, [cotizacionId, cpmInicialCargado, disabled, formData])
+  }, [cotizacionId, cpmInicialCargado, disabled, formData, presupuestoClienteInicial])
 
   const marcarCambioUsuario = () => {
     usuarioModificoCpmRef.current = true
@@ -311,13 +327,13 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
     }))
   }
 
-  const handleCopy = async (key, value) => {
+  const handleCopy = async (key, value, decimals = 2) => {
     if (disabled) {
       return
     }
 
     const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0
-    const rawValue = safeValue.toFixed(2)
+    const rawValue = safeValue.toFixed(decimals)
 
     try {
       await navigator.clipboard.writeText(rawValue)
@@ -344,7 +360,7 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
   return (
     <Tarjeta className="space-y-5">
       <div className="space-y-2">
-        <h3 className="text-lg font-semibold text-slate-950">CPM e inversión</h3>
+        <h3 className="text-lg font-semibold text-slate-950">CPM e Impresiones</h3>
         {errorCpm && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {errorCpm}
@@ -443,7 +459,7 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
         </section>
 
         <section className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5">
-          <h4 className="text-base font-semibold text-slate-950">Inversión</h4>
+          <h4 className="text-base font-semibold text-slate-950">Impresiones</h4>
 
           <div className="space-y-4">
             <FieldRow label="CPM a utilizar">
@@ -468,9 +484,9 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
               disabled={disabled || !cpmInicialCargado || formData.cpm_fuente !== 'manual'}
             />
             <NumericRow
-              label="Impresiones"
-              name="impresiones"
-              value={formData.impresiones}
+              label="Presupuesto cliente"
+              name="presupuesto_cliente"
+              value={formData.presupuesto_cliente}
               onChange={handleChange}
               placeholder="0"
               disabled={disabled || !cpmInicialCargado}
@@ -486,16 +502,18 @@ export default function CalculosCpmInversion({ cotizacionId, disabled = false })
           </div>
 
           <ResultadoCopiable
-            id="inversion"
-            label="Inversión estimada"
-            value={inversionEstimada}
+            id="impresiones_estimadas"
+            label="Impresiones estimadas"
+            value={impresionesEstimadas}
             copiedKey={copiedKey}
             onCopy={handleCopy}
             disabled={disabled}
+            formatter={formatNumber}
+            copyDecimals={4}
           />
 
           <p className="text-xs text-slate-500">
-            CPM × impresiones / {formatFormulaNumber(divisorFormula)}
+            Presupuesto × divisor / CPM
           </p>
         </section>
       </div>

@@ -1,14 +1,14 @@
 export const tratamientoCotizacionMock = {
   columnas: [
-    { key: 'screenName', label: 'Screen name', editable: false, origen: 'base' },
-    { key: 'city', label: 'City', editable: false, origen: 'base' },
-    { key: 'venueType', label: 'Venue type', editable: false, origen: 'base' },
-    { key: 'latitude', label: 'Latitude', editable: false, origen: 'base' },
-    { key: 'longitude', label: 'Longitude', editable: false, origen: 'base' },
-    { key: 'dimensions', label: 'Dimension', editable: false, origen: 'base' },
-    { key: 'impressions', label: 'Impressions', editable: false, origen: 'base' },
-    { key: 'status', label: 'Status', editable: false, origen: 'base' },
-    { key: 'Map', label: 'Map', editable: false, origen: 'base' }
+    { key: 'screenName', label: 'Screen name' },
+    { key: 'city', label: 'City' },
+    { key: 'venueType', label: 'Venue type' },
+    { key: 'latitude', label: 'Latitude' },
+    { key: 'longitude', label: 'Longitude' },
+    { key: 'dimensions', label: 'Dimension' },
+    { key: 'impressions', label: 'Impressions' },
+    { key: 'status', label: 'Status' },
+    { key: 'Map', label: 'Map' }
   ],
   filas: [
     {

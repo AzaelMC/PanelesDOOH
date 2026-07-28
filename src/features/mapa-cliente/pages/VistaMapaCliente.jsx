@@ -5,29 +5,15 @@ import Boton from '../../../components/ui/Boton'
 import Tarjeta from '../../../components/ui/Tarjeta'
 import { cotizacionesMock } from '../../cotizaciones/data/cotizacionesMock'
 import { obtenerCotizacionPorId } from '../../cotizaciones/services/cotizacionesApi'
+import { obtenerCpmCotizacion } from '../../tratamiento/services/cpmApi'
 import BuscadorPantallas from '../components/BuscadorPantallas'
+import CabeceraMapaCliente from '../components/CabeceraMapaCliente'
 import LienzoMapaPlaceholder from '../components/LienzoMapaPlaceholder'
 import ModalStreetViewPlaceholder from '../components/ModalStreetViewPlaceholder'
 import PanelListadoPantallas from '../components/PanelListadoPantallas'
+import ChatPropuesta from '../../chat/components/ChatPropuesta'
+import { escucharAlertasChat, escucharChatLeido } from '../../chat/utils/eventosChat'
 import { pantallasMock } from '../data/pantallasMock'
-
-const cacheCotizacionesMapa = new Map()
-
-function obtenerCotizacionMapa(cotizacionId) {
-  const cacheKey = String(cotizacionId || '')
-
-  if (cacheCotizacionesMapa.has(cacheKey)) {
-    return cacheCotizacionesMapa.get(cacheKey)
-  }
-
-  const request = obtenerCotizacionPorId(cotizacionId).catch((error) => {
-    cacheCotizacionesMapa.delete(cacheKey)
-    throw error
-  })
-
-  cacheCotizacionesMapa.set(cacheKey, request)
-  return request
-}
 
 function useDebouncedValue(value, delay = 250) {
   const [debouncedValue, setDebouncedValue] = useState(value)
@@ -53,8 +39,25 @@ function buildMockSource(cotizacionId) {
 
   return {
     cotizacion,
+    cpm: null,
     pantallas: pantallasMock.filter((pantalla) => pantalla.is_active)
   }
+}
+
+function obtenerRegionesPantallas(pantallas = []) {
+  const regiones = new Set()
+
+  pantallas.forEach((pantalla) => {
+    const region = String(pantalla?.city || '').trim()
+
+    if (!region || region.toLowerCase() === 'sin ciudad') {
+      return
+    }
+
+    regiones.add(region)
+  })
+
+  return Array.from(regiones).sort((a, b) => a.localeCompare(b, 'es'))
 }
 
 export default function VistaMapaCliente() {
@@ -66,6 +69,7 @@ export default function VistaMapaCliente() {
   const [centrarSeleccion, setCentrarSeleccion] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [cotizacion, setCotizacion] = useState(null)
+  const [cpm, setCpm] = useState(null)
   const [pantallas, setPantallas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -78,9 +82,10 @@ export default function VistaMapaCliente() {
     async function cargarVista() {
       if (!cotizacionKey) {
         setCotizacion(null)
+        setCpm(null)
         setPantallas([])
         setPantallaSeleccionadaId(null)
-        setError('No se recibio el identificador de cotizacion.')
+        setError('No se pudo cargar')
         setCargando(false)
         return
       }
@@ -90,7 +95,10 @@ export default function VistaMapaCliente() {
       setError('')
 
       try {
-        const detalle = await obtenerCotizacionMapa(cotizacionId)
+        const [detalle, cpmDetalle] = await Promise.all([
+          obtenerCotizacionPorId(cotizacionId),
+          obtenerCpmCotizacion(cotizacionId).catch(() => null)
+        ])
 
         if (!active || ultimaCotizacionSolicitadaRef.current !== cotizacionKey) {
           return
@@ -98,8 +106,9 @@ export default function VistaMapaCliente() {
 
         const pantallasActivas = (detalle.ubicaciones || []).filter((pantalla) => pantalla.is_active)
         setCotizacion(detalle)
+        setCpm(cpmDetalle)
         setPantallas(pantallasActivas)
-        setPantallaSeleccionadaId(pantallasActivas[0]?.id || null)
+        setPantallaSeleccionadaId(null)
         setCentrarSeleccion(false)
       } catch (loadError) {
         if (!active || ultimaCotizacionSolicitadaRef.current !== cotizacionKey) {
@@ -109,15 +118,17 @@ export default function VistaMapaCliente() {
         if (AUTH_MOCK_ENABLED) {
           const source = buildMockSource(cotizacionId)
           setCotizacion(source.cotizacion)
+          setCpm(source.cpm)
           setPantallas(source.pantallas)
-          setPantallaSeleccionadaId(source.pantallas[0]?.id || null)
+          setPantallaSeleccionadaId(null)
           setCentrarSeleccion(false)
         } else {
           setCotizacion(null)
+          setCpm(null)
           setPantallas([])
           setPantallaSeleccionadaId(null)
           setCentrarSeleccion(false)
-          setError(loadError.message || 'No fue posible cargar la vista de mapa.')
+          setError(loadError.message || 'No se pudo cargar')
         }
       } finally {
         if (active && ultimaCotizacionSolicitadaRef.current === cotizacionKey) {
@@ -134,8 +145,39 @@ export default function VistaMapaCliente() {
   }, [cotizacionId])
 
   useEffect(() => {
-    setCentrarSeleccion(false)
-  }, [busquedaDebounced])
+    const limpiarAlertas = escucharAlertasChat(({ alertas = [] }) => {
+      const tieneAlerta = (Array.isArray(alertas) ? alertas : []).some(
+        (alerta) => String(alerta.cotizacionId || alerta.cotizacion_id) === String(cotizacionId)
+      )
+
+      setCotizacion((current) => current
+        ? {
+            ...current,
+            tieneMensajeNuevo: tieneAlerta,
+            tiene_mensaje_nuevo: tieneAlerta
+          }
+        : current)
+    })
+
+    const limpiarLeido = escucharChatLeido(({ cotizacionId: cotizacionLeidaId }) => {
+      if (String(cotizacionLeidaId) !== String(cotizacionId)) {
+        return
+      }
+
+      setCotizacion((current) => current
+        ? {
+            ...current,
+            tieneMensajeNuevo: false,
+            tiene_mensaje_nuevo: false
+          }
+        : current)
+    })
+
+    return () => {
+      limpiarAlertas()
+      limpiarLeido()
+    }
+  }, [cotizacionId])
 
   const pantallasFiltradas = useMemo(() => {
     const search = busquedaDebounced.trim().toLowerCase()
@@ -153,12 +195,10 @@ export default function VistaMapaCliente() {
   }, [pantallas, busquedaDebounced])
 
   const pantallaSeleccionada = useMemo(() => {
-    return (
-      pantallasFiltradas.find((pantalla) => pantalla.id === pantallaSeleccionadaId) ||
-      pantallasFiltradas[0] ||
-      null
-    )
+    return pantallasFiltradas.find((pantalla) => pantalla.id === pantallaSeleccionadaId) || null
   }, [pantallasFiltradas, pantallaSeleccionadaId])
+
+  const regiones = useMemo(() => obtenerRegionesPantallas(pantallas), [pantallas])
 
   const seleccionarPantalla = useCallback((id) => {
     setPantallaSeleccionadaId(id)
@@ -173,13 +213,22 @@ export default function VistaMapaCliente() {
     setModalOpen(false)
   }, [])
 
+  const marcarMensajesLeidos = useCallback(() => {
+    setCotizacion((current) => current
+      ? {
+          ...current,
+          tiene_mensaje_nuevo: false,
+          tieneMensajeNuevo: false,
+          mensajes_cliente_no_leidos: 0,
+          mensajesClienteNoLeidos: 0
+        }
+      : current)
+  }, [])
+
   if (cargando) {
     return (
       <Tarjeta className="text-center">
-        <p className="text-lg font-medium text-slate-900">Cargando vista de mapa...</p>
-        <p className="mt-2 text-sm text-slate-500">
-          Recuperando la cotizacion y sus pantallas activas desde backend.
-        </p>
+        <p className="text-lg font-medium text-slate-900">Cargando mapa</p>
       </Tarjeta>
     )
   }
@@ -187,7 +236,7 @@ export default function VistaMapaCliente() {
   if (error) {
     return (
       <Tarjeta className="space-y-4 text-center">
-        <p className="text-lg font-medium text-slate-900">No fue posible abrir esta vista.</p>
+        <p className="text-lg font-medium text-slate-900">No se pudo cargar</p>
         <p className="text-sm text-rose-700">{error}</p>
         <div className="flex justify-center">
           <Boton onClick={() => window.location.reload()}>
@@ -199,48 +248,32 @@ export default function VistaMapaCliente() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.36em] text-slate-500">
-          Visualizacion dual cliente final
-        </p>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl space-y-3">
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
-              {cotizacion?.nombreCampana || 'Cotizacion sin nombre'}
-            </h2>
-            <p className="text-base leading-8 text-slate-600">
-              Split-layout preparado para validar pantallas activas, sincronizar seleccion entre listado y mapa,
-              y abrir posteriormente Street View real por coordenadas.
-            </p>
-          </div>
-
-          <Tarjeta className="min-w-[260px] space-y-2 bg-white/95 text-slate-950">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Cliente</p>
-            <p className="text-2xl font-semibold text-slate-950">{cotizacion?.cliente || '-'}</p>
-            <p className="text-sm text-slate-600">
-              Pantallas visibles: {pantallasFiltradas.length}
-            </p>
-          </Tarjeta>
-        </div>
-      </section>
+    <div className="space-y-6">
+      <CabeceraMapaCliente
+        cotizacion={cotizacion}
+        cpm={cpm}
+        pantallas={pantallas}
+        regiones={regiones}
+        mostrarEstadoPropuesta
+      />
 
       {pantallas.length === 0 ? (
         <Tarjeta className="text-center">
-          <p className="text-lg font-medium text-slate-900">No hay pantallas activas disponibles.</p>
-          <p className="mt-2 text-sm text-slate-500">
-            Cuando la cotizacion tenga pantallas activas apareceran en esta vista placeholder.
-          </p>
+          <p className="text-lg font-medium text-slate-900">Sin pantallas</p>
         </Tarjeta>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <div className="space-y-5">
+        <div className="grid gap-6 xl:h-[720px] xl:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="flex min-h-0 flex-col gap-5">
             <BuscadorPantallas
               value={busqueda}
-              onChange={(event) => setBusqueda(event.target.value)}
+              onChange={(event) => {
+                setBusqueda(event.target.value)
+                setCentrarSeleccion(false)
+              }}
             />
 
             <PanelListadoPantallas
+              className="xl:min-h-0"
               pantallas={pantallasFiltradas}
               pantallaSeleccionadaId={pantallaSeleccionadaId}
               seleccionarPantalla={seleccionarPantalla}
@@ -256,6 +289,16 @@ export default function VistaMapaCliente() {
           />
         </div>
       )}
+
+      <ChatPropuesta
+        key={cotizacionId}
+        modo="interno"
+        cotizacionId={cotizacionId}
+        nombreCampana={cotizacion?.nombreCampana || cotizacion?.nombre_campana || ''}
+        estadoPropuesta={cotizacion?.estadoPropuesta || cotizacion?.estado_propuesta}
+        tieneMensajeNuevo={Boolean(cotizacion?.tieneMensajeNuevo || cotizacion?.tiene_mensaje_nuevo)}
+        onMensajesLeidos={marcarMensajesLeidos}
+      />
 
       <ModalStreetViewPlaceholder
         open={modalOpen}

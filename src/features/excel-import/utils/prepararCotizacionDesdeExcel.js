@@ -74,7 +74,11 @@ function resolverErrorColumnas(columnasDetectadas) {
 export function prepararCotizacionDesdeExcel({
   archivoProcesado,
   nombreCampana,
-  cliente
+  cliente,
+  fechaInicio = '',
+  fechaTermino = '',
+  tipoCompra = '',
+  presupuestoCliente = ''
 }) {
   const hojas = archivoProcesado?.hojas || []
   const hojaPreferida = archivoProcesado?.hojaPreferida
@@ -135,6 +139,10 @@ export function prepararCotizacionDesdeExcel({
     id: crearIdTemporalCotizacion(),
     nombreCampana,
     cliente,
+    fechaInicio,
+    fechaTermino,
+    tipoCompra,
+    presupuestoCliente,
     nombreArchivo: archivoProcesado.nombreArchivo,
     nombreHoja: hojaInfo.nombreHoja,
     fechaCreacion: new Date().toISOString(),

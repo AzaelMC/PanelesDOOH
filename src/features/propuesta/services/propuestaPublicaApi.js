@@ -1,4 +1,6 @@
 import { API_BASE_URL } from '../../../config/env'
+import { normalizarPantallasMapa } from '../../mapa-cliente/utils/prepararPantallasMapa'
+import { normalizarEstadoPropuesta, obtenerTextoEstadoPropuesta } from '../../cotizaciones/utils/estadoPropuesta'
 
 function stripTrailingSlash(value = '') {
   return value.replace(/\/+$/, '')
@@ -29,6 +31,10 @@ function isHtmlResponseBody(value = '') {
   return normalized.includes('<!doctype html') || normalized.includes('<html')
 }
 
+function pickFirst(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '')
+}
+
 async function parseResponse(response) {
   const contentType = response.headers.get('content-type') || ''
   const contentLength = response.headers.get('content-length')
@@ -44,7 +50,7 @@ async function parseResponse(response) {
   const payload = await response.text()
 
   if (isHtmlResponseBody(payload)) {
-    throw new Error('La API publica devolvio HTML en lugar de JSON. Revisa la ruta del endpoint o reglas del servidor.')
+    throw new Error('No se pudo cargar')
   }
 
   return payload
@@ -66,21 +72,108 @@ async function publicRequest(endpoint) {
   }
 
   if (payload && typeof payload === 'object' && payload.ok === false) {
-    throw new Error(getBackendMessage(payload, 'La API publica devolvio un error.'))
+    throw new Error(getBackendMessage(payload, 'No se pudo cargar'))
   }
 
   return payload
 }
 
-export async function obtenerSnapshotPublico(token) {
+function normalizarCotizacionPublica(propuesta = {}) {
+  const cotizacion = propuesta?.cotizacion && typeof propuesta.cotizacion === 'object'
+    ? propuesta.cotizacion
+    : {}
+  const resumen = propuesta?.resumen && typeof propuesta.resumen === 'object'
+    ? propuesta.resumen
+    : {}
+
+  const estadoPropuesta = normalizarEstadoPropuesta(
+    pickFirst(cotizacion.estadoPropuesta, resumen.estadoPropuesta, cotizacion.estado_propuesta, resumen.estado_propuesta, 'en_revision')
+  )
+
+  return {
+    ...cotizacion,
+    ...resumen,
+    id: pickFirst(cotizacion.id, resumen.id, null),
+    nombreCampana: pickFirst(cotizacion.nombreCampana, resumen.nombreCampana, cotizacion.nombre_campana, resumen.nombre_campana, ''),
+    cliente: pickFirst(cotizacion.cliente, resumen.cliente, cotizacion.nombreCliente, cotizacion.nombre_cliente, ''),
+    fechaInicio: pickFirst(cotizacion.fechaInicio, resumen.fechaInicio, cotizacion.fecha_inicio, resumen.fecha_inicio, ''),
+    fechaTermino: pickFirst(cotizacion.fechaTermino, resumen.fechaTermino, cotizacion.fecha_termino, resumen.fecha_termino, ''),
+    formato: pickFirst(cotizacion.formato, resumen.formato, ''),
+    tipoCompra: pickFirst(cotizacion.tipoCompra, resumen.tipoCompra, cotizacion.tipo_compra, resumen.tipo_compra, ''),
+    presupuestoCliente: pickFirst(cotizacion.presupuestoCliente, resumen.presupuestoCliente, cotizacion.presupuesto_cliente, resumen.presupuesto_cliente, ''),
+    pantallasActivas: pickFirst(cotizacion.pantallasActivas, resumen.pantallas, resumen.screens, cotizacion.pantallas_activas, ''),
+    estadoPropuesta,
+    estado_propuesta: estadoPropuesta,
+    estadoPropuestaTexto: obtenerTextoEstadoPropuesta(estadoPropuesta),
+    fechaEstadoPropuesta: pickFirst(cotizacion.fechaEstadoPropuesta, resumen.fechaEstadoPropuesta, cotizacion.fecha_estado_propuesta, resumen.fecha_estado_propuesta, ''),
+    fecha_estado_propuesta: pickFirst(cotizacion.fecha_estado_propuesta, resumen.fecha_estado_propuesta, cotizacion.fechaEstadoPropuesta, resumen.fechaEstadoPropuesta, '')
+  }
+}
+
+function normalizarCpmPublico(propuesta = {}) {
+  const cpm = propuesta?.cpm && typeof propuesta.cpm === 'object' ? propuesta.cpm : {}
+  const resumen = propuesta?.resumen && typeof propuesta.resumen === 'object' ? propuesta.resumen : {}
+  const tarifasBase = cpm?.tarifas && typeof cpm.tarifas === 'object'
+    ? cpm.tarifas
+    : {}
+  const cpmCliente = pickFirst(cpm.cpmCliente, cpm.cpm_cliente, '')
+  const cpmTp = pickFirst(cpm.cpmTp, cpm.cpm_tp, '')
+  const usarTp = pickFirst(cpm.usarTp, cpm.usar_tp, false)
+
+  return {
+    ...cpm,
+    tarifas: {
+      ach: pickFirst(tarifasBase.ach, cpmCliente, null) ?? null,
+      publicada: pickFirst(tarifasBase.publicada, cpmTp, null) ?? null
+    },
+    cpmCliente,
+    cpm_cliente: cpmCliente,
+    cpmTp,
+    cpm_tp: cpmTp,
+    usarTp,
+    usar_tp: usarTp,
+    valorCpm: pickFirst(cpm.valorCpm, cpm.valor_cpm, ''),
+    valor_cpm: pickFirst(cpm.valor_cpm, cpm.valorCpm, ''),
+    cpmFuente: pickFirst(cpm.cpmFuente, cpm.cpm_fuente, ''),
+    cpm_fuente: pickFirst(cpm.cpm_fuente, cpm.cpmFuente, ''),
+    presupuesto_cliente: pickFirst(cpm.presupuesto_cliente, cpm.presupuestoCliente, resumen.presupuesto_cliente, resumen.presupuestoCliente, ''),
+    presupuestoCliente: pickFirst(cpm.presupuestoCliente, cpm.presupuesto_cliente, resumen.presupuestoCliente, resumen.presupuesto_cliente, ''),
+    impresiones_estimadas: pickFirst(cpm.impresiones_estimadas, cpm.impresionesEstimadas, resumen.impresiones_estimadas, resumen.impresionesEstimadas, ''),
+    impresionesEstimadas: pickFirst(cpm.impresionesEstimadas, cpm.impresiones_estimadas, resumen.impresionesEstimadas, resumen.impresiones_estimadas, '')
+  }
+}
+
+export function obtenerUrlExcelPublico(token) {
   const tokenLimpio = String(token || '').trim()
 
   if (!tokenLimpio) {
-    throw new Error('Token de propuesta requerido.')
+    return ''
   }
 
-  const response = await publicRequest(`/snapshot_publico.php?token=${encodeURIComponent(tokenLimpio)}`)
-  return response?.snapshot || response
+  return buildRequestUrl(`/excel.php?token=${encodeURIComponent(tokenLimpio)}`)
+}
+
+export async function obtenerPropuestaPublica(token) {
+  const tokenLimpio = String(token || '').trim()
+
+  if (!tokenLimpio) {
+    throw new Error('No se pudo cargar')
+  }
+
+  const response = await publicRequest(`/propuesta_publica.php?token=${encodeURIComponent(tokenLimpio)}`)
+  const propuesta = response?.propuesta && typeof response.propuesta === 'object'
+    ? response.propuesta
+    : response
+  const pantallas = normalizarPantallasMapa(propuesta?.pantallas || propuesta?.ubicaciones || [])
+
+  return {
+    ...propuesta,
+    cotizacion: normalizarCotizacionPublica(propuesta),
+    cpm: normalizarCpmPublico(propuesta),
+    pantallas,
+    ubicaciones: pantallas,
+    resumen: propuesta?.resumen || {}
+  }
 }
 
 export async function obtenerMapsPublicConfig() {
@@ -92,12 +185,8 @@ export async function obtenerMapsPublicConfig() {
   const apiKey = String(rawMapsConfig?.apiKey || '').trim()
   const mapId = String(rawMapsConfig?.mapId || '').trim()
 
-  if (!apiKey) {
-    throw new Error('La API key publica de Google Maps no esta configurada.')
-  }
-
-  if (!mapId) {
-    throw new Error('El Map ID publico de Google Maps no esta configurado.')
+  if (!apiKey || !mapId) {
+    throw new Error('No se pudo cargar el mapa')
   }
 
   return {

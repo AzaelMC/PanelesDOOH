@@ -5,7 +5,14 @@ export function parseNumeroOpcional(valor) {
     return null
   }
 
-  const normalizado = typeof valor === 'string' ? valor.replace(',', '.') : valor
+  const normalizado = typeof valor === 'string'
+    ? valor.trim().replace(/\s+/g, '').replace(/\$/g, '').replace(/,/g, '')
+    : valor
+
+  if (normalizado === '') {
+    return null
+  }
+
   const numero = Number(normalizado)
 
   return Number.isFinite(numero) ? numero : null
@@ -33,7 +40,7 @@ export function calcularCpmInversion(datos = {}) {
   const usarTp = Boolean(datos.usar_tp)
   const tp = parseNumeroOpcional(datos.tp)
   const divisor = parseNumeroOpcional(datos.divisor)
-  const impresiones = parseNumeroOpcional(datos.impresiones)
+  const presupuestoCliente = parseNumeroOpcional(datos.presupuesto_cliente)
 
   const total = redondearNumero(rebate + extraRebate + margen + fased)
   const cpmCliente = cpmBase !== null && total !== null && total < 100
@@ -44,7 +51,7 @@ export function calcularCpmInversion(datos = {}) {
     ? redondearNumero(cpmCliente / (1 - tp / 100))
     : null
 
-  let valorCpm = null
+  let valorCpm
 
   if (datos.cpm_fuente === 'tp') {
     valorCpm = cpmTp
@@ -54,8 +61,8 @@ export function calcularCpmInversion(datos = {}) {
     valorCpm = cpmCliente
   }
 
-  const inversion = valorCpm !== null && impresiones !== null && divisor !== null && divisor > 0
-    ? redondearNumero((valorCpm * impresiones) / divisor)
+  const impresionesEstimadas = valorCpm !== null && valorCpm > 0 && presupuestoCliente !== null && divisor !== null && divisor > 0
+    ? redondearNumero((presupuestoCliente * divisor) / valorCpm)
     : null
 
   return {
@@ -63,6 +70,6 @@ export function calcularCpmInversion(datos = {}) {
     cpm_cliente: cpmCliente,
     cpm_tp: cpmTp,
     valor_cpm: valorCpm,
-    inversion
+    impresiones_estimadas: impresionesEstimadas
   }
 }

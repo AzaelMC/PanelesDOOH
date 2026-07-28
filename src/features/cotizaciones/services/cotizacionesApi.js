@@ -2,17 +2,18 @@ import { AUTH_MOCK_ENABLED } from '../../../config/env'
 import apiClient from '../../../services/apiClient'
 import { cotizacionesMock } from '../data/cotizacionesMock'
 import { tratamientoCotizacionMock } from '../../tratamiento/data/tratamientoCotizacionMock'
+import { normalizarEstadoPropuesta, obtenerTextoEstadoPropuesta, tieneMensajeNuevo } from '../utils/estadoPropuesta'
 
 const COLUMNAS_BASE = [
-  { key: 'screenName', label: 'Screen name', editable: false, origen: 'base' },
-  { key: 'city', label: 'City', editable: false, origen: 'base' },
-  { key: 'venueType', label: 'Venue type', editable: false, origen: 'base' },
-  { key: 'latitude', label: 'Latitude', editable: false, origen: 'base' },
-  { key: 'longitude', label: 'Longitude', editable: false, origen: 'base' },
-  { key: 'dimensions', label: 'Dimension', editable: false, origen: 'base' },
-  { key: 'impressions', label: 'Impressions', editable: false, origen: 'base' },
-  { key: 'cardinalPoint', label: 'Cardinal point', editable: false, origen: 'base' },
-  { key: 'status', label: 'Status', editable: false, origen: 'base' }
+  { key: 'screenName', label: 'Screen name' },
+  { key: 'city', label: 'City' },
+  { key: 'venueType', label: 'Venue type' },
+  { key: 'latitude', label: 'Latitude' },
+  { key: 'longitude', label: 'Longitude' },
+  { key: 'dimensions', label: 'Dimension' },
+  { key: 'impressions', label: 'Impressions' },
+  { key: 'cardinalPoint', label: 'Cardinal point' },
+  { key: 'status', label: 'Status' }
 ]
 
 const CAMPOS_RESERVADOS_PANTALLA = new Set([
@@ -138,6 +139,23 @@ function toNullableNumber(value) {
 
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizarDecimalParaApi(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const normalized = typeof value === 'string'
+    ? value.trim().replace(/\s+/g, '').replace(/\$/g, '').replace(/,/g, '')
+    : value
+
+  if (normalized === '') {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? String(normalized) : null
 }
 
 function toBoolean(value, fallback = false) {
@@ -526,6 +544,10 @@ function construirPayloadInicioActualizacion(cotizacion = {}, totalCambios = 0) 
     cliente: limpiarTextoParaApi(pickFirst(cotizacion.cliente, ''), { maxLength: 255 }),
     nombreArchivo: limpiarTextoParaApi(pickFirst(cotizacion.nombreArchivo, ''), { maxLength: 255 }),
     nombreHoja: limpiarTextoParaApi(pickFirst(cotizacion.nombreHoja, ''), { maxLength: 255 }),
+    fecha_inicio: limpiarTextoParaApi(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, ''), { maxLength: 20 }),
+    fecha_termino: limpiarTextoParaApi(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, ''), { maxLength: 20 }),
+    tipo_compra: limpiarTextoParaApi(pickFirst(cotizacion.tipoCompra, cotizacion.tipo_compra, ''), { maxLength: 100 }),
+    presupuesto_cliente: normalizarDecimalParaApi(pickFirst(cotizacion.presupuestoCliente, cotizacion.presupuesto_cliente)),
     notasInternas: limpiarTextoParaApi(pickFirst(cotizacion.notasInternas, ''), { maxLength: 4000 }),
     estatus: limpiarTextoParaApi(pickFirst(cotizacion.estatus, cotizacion.estado, 'borrador'), { maxLength: 80 })
   }
@@ -671,6 +693,10 @@ export function normalizarPayloadCotizacionParaApi(cotizacion = {}) {
     cliente: limpiarTextoParaApi(pickFirst(cotizacion.cliente, ''), { maxLength: 255 }),
     nombreArchivo: limpiarTextoParaApi(pickFirst(cotizacion.nombreArchivo, ''), { maxLength: 255 }),
     nombreHoja: limpiarTextoParaApi(pickFirst(cotizacion.nombreHoja, ''), { maxLength: 255 }),
+    fecha_inicio: limpiarTextoParaApi(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, ''), { maxLength: 20 }),
+    fecha_termino: limpiarTextoParaApi(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, ''), { maxLength: 20 }),
+    tipo_compra: limpiarTextoParaApi(pickFirst(cotizacion.tipoCompra, cotizacion.tipo_compra, ''), { maxLength: 100 }),
+    presupuesto_cliente: normalizarDecimalParaApi(pickFirst(cotizacion.presupuestoCliente, cotizacion.presupuesto_cliente)),
     notasInternas: limpiarTextoParaApi(pickFirst(cotizacion.notasInternas, ''), { maxLength: 4000 }),
     diagnostico,
     resumen,
@@ -698,9 +724,7 @@ function normalizeColumn(rawColumn) {
   if (typeof rawColumn === 'string') {
     return {
       key: rawColumn,
-      label: rawColumn,
-      editable: false,
-      origen: 'base'
+      label: rawColumn
     }
   }
 
@@ -710,9 +734,7 @@ function normalizeColumn(rawColumn) {
     ),
     label: String(
       pickFirst(rawColumn?.label, rawColumn?.nombre, rawColumn?.titulo, rawColumn?.key, 'Columna')
-    ),
-    editable: toBoolean(rawColumn?.editable, false),
-    origen: pickFirst(rawColumn?.origen, rawColumn?.source, 'base')
+    )
   }
 }
 
@@ -727,9 +749,7 @@ function buildColumnsFromLocations(ubicaciones = []) {
 
       columnasMap.set(key, {
         key,
-        label: key,
-        editable: true,
-        origen: 'manual'
+        label: key
       })
     })
   })
@@ -817,6 +837,11 @@ function normalizeCotizacionResumen(rawCotizacion = {}) {
     pickFirst(rawCotizacion.totalPantallasActivas, rawCotizacion.total_pantallas_activas, rawCotizacion.totalActivas),
     0
   )
+  const estatus = String(pickFirst(rawCotizacion.estatus, rawCotizacion.estado_operativo, rawCotizacion.estado, 'borrador'))
+  const estadoPropuesta = normalizarEstadoPropuesta(
+    pickFirst(rawCotizacion.estadoPropuesta, rawCotizacion.estado_propuesta, 'en_revision')
+  )
+  const hayMensajeNuevo = tieneMensajeNuevo(rawCotizacion)
 
   return {
     id: String(pickFirst(rawCotizacion.id, rawCotizacion.cotizacionId, rawCotizacion.cotizacion_id, '')),
@@ -826,6 +851,11 @@ function normalizeCotizacionResumen(rawCotizacion = {}) {
     cliente: String(pickFirst(rawCotizacion.cliente, rawCotizacion.clienteNombre, '')),
     nombreArchivo: String(pickFirst(rawCotizacion.nombreArchivo, rawCotizacion.nombre_archivo, '')),
     nombreHoja: String(pickFirst(rawCotizacion.nombreHoja, rawCotizacion.nombre_hoja, '')),
+    presupuestoCliente: String(pickFirst(rawCotizacion.presupuestoCliente, rawCotizacion.presupuesto_cliente, '')),
+    fechaInicio: String(pickFirst(rawCotizacion.fechaInicio, rawCotizacion.fecha_inicio, '')),
+    fechaTermino: String(pickFirst(rawCotizacion.fechaTermino, rawCotizacion.fecha_termino, '')),
+    tipoCompra: String(pickFirst(rawCotizacion.tipoCompra, rawCotizacion.tipo_compra, '')),
+    formato: String(pickFirst(rawCotizacion.formato, '')),
     notasInternas: String(pickFirst(rawCotizacion.notasInternas, rawCotizacion.notas_internas, '')),
     usuarioCreadorId: String(
       pickFirst(rawCotizacion.usuarioCreadorId, rawCotizacion.usuario_creador_id, rawCotizacion.creadoPorId, '')
@@ -845,7 +875,19 @@ function normalizeCotizacionResumen(rawCotizacion = {}) {
     fechaActualizacion: String(
       pickFirst(rawCotizacion.fechaActualizacion, rawCotizacion.fecha_actualizacion, rawCotizacion.updatedAt, '')
     ),
-    estado: String(pickFirst(rawCotizacion.estado, rawCotizacion.estatus, 'borrador')),
+    estado: estatus,
+    estatus,
+    estadoPropuesta,
+    estado_propuesta: estadoPropuesta,
+    estadoPropuestaTexto: obtenerTextoEstadoPropuesta(estadoPropuesta),
+    fechaEstadoPropuesta: String(pickFirst(rawCotizacion.fechaEstadoPropuesta, rawCotizacion.fecha_estado_propuesta, '')),
+    fecha_estado_propuesta: String(pickFirst(rawCotizacion.fecha_estado_propuesta, rawCotizacion.fechaEstadoPropuesta, '')),
+    tieneMensajeNuevo: hayMensajeNuevo,
+    tiene_mensaje_nuevo: hayMensajeNuevo,
+    mensajeAlerta: String(pickFirst(rawCotizacion.mensajeAlerta, rawCotizacion.mensaje_alerta, '')),
+    mensaje_alerta: String(pickFirst(rawCotizacion.mensaje_alerta, rawCotizacion.mensajeAlerta, '')),
+    ultimoMensajeCliente: String(pickFirst(rawCotizacion.ultimoMensajeCliente, rawCotizacion.ultimo_mensaje_cliente, '')),
+    ultimo_mensaje_cliente: String(pickFirst(rawCotizacion.ultimo_mensaje_cliente, rawCotizacion.ultimoMensajeCliente, '')),
     totalPantallas,
     totalPantallasActivas,
     puedeEditar: pickFirst(rawCotizacion.puedeEditar, rawCotizacion.puede_editar, rawCotizacion.canEdit)
@@ -927,6 +969,10 @@ export function construirPayloadCotizacion(cotizacion = {}) {
     cliente: String(pickFirst(cotizacion.cliente, '')),
     nombreArchivo: String(pickFirst(cotizacion.nombreArchivo, '')),
     nombreHoja: String(pickFirst(cotizacion.nombreHoja, '')),
+    fechaInicio: String(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, '')),
+    fechaTermino: String(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, '')),
+    tipoCompra: String(pickFirst(cotizacion.tipoCompra, cotizacion.tipo_compra, '')),
+    presupuestoCliente: String(pickFirst(cotizacion.presupuestoCliente, cotizacion.presupuesto_cliente, '')),
     notasInternas: String(pickFirst(cotizacion.notasInternas, '')),
     fechaCreacion: String(pickFirst(cotizacion.fechaCreacion, new Date().toISOString())),
     estado: String(pickFirst(cotizacion.estado, 'borrador')),

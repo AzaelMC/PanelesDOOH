@@ -38,8 +38,9 @@ const modulos = [
 export default function PanelPrincipal() {
   const { usuario } = useAutenticacion()
 
+  const esAdministrador = usuario?.rol === 'administrador'
   const modulosVisibles = modulos.filter((modulo) => (
-    !modulo.soloAdministrador || usuario?.rol === 'administrador'
+    !modulo.soloAdministrador || esAdministrador
   ))
 
   return (
@@ -54,7 +55,7 @@ export default function PanelPrincipal() {
         </p>
       </section>
 
-      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      <section className={`grid gap-6 md:grid-cols-2 ${esAdministrador ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
         {modulosVisibles.map((modulo) => (
           <TarjetaModulo key={modulo.titulo} {...modulo} />
         ))}

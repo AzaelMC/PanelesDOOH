@@ -17,7 +17,7 @@ export default function FiltrosCotizaciones({
       <div className="space-y-2">
         <h3 className="ntp-page-title text-lg">Filtros rapidos</h3>
         <p className="ntp-body-copy text-sm">
-          Busca por campana o cliente y acota por responsable creador o estatus.
+          Busca por campana o cliente y acota por responsable creador o estado de propuesta.
         </p>
       </div>
 
@@ -38,12 +38,12 @@ export default function FiltrosCotizaciones({
 
         <CampoTexto
           as="select"
-          label="Estatus"
-          name="estatus"
+          label="Estado de propuesta"
+          name="estadoPropuesta"
           value={estatusSeleccionado}
           onChange={onEstatusChange}
         >
-          <option value="">Todos los estatus</option>
+          <option value="">Todos los estados</option>
           {estatusDisponibles.map((estatus) => (
             <option key={estatus} value={estatus}>
               {estatus}

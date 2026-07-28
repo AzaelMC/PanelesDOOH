@@ -4,6 +4,7 @@ import Tarjeta from '../../../components/ui/Tarjeta'
 import FiltrosCotizaciones from '../components/FiltrosCotizaciones'
 import TarjetaCotizacion from '../components/TarjetaCotizacion'
 import { obtenerCotizaciones } from '../services/cotizacionesApi'
+import { escucharAlertasChat, escucharChatLeido } from '../../chat/utils/eventosChat'
 
 export default function HistorialCotizaciones() {
   const [busqueda, setBusqueda] = useState('')
@@ -45,6 +46,49 @@ export default function HistorialCotizaciones() {
     }
   }, [])
 
+  useEffect(() => {
+    const limpiarAlertas = escucharAlertasChat(({ alertas = [] }) => {
+      const idsConAlerta = new Set(
+        (Array.isArray(alertas) ? alertas : [])
+          .map((alerta) => String(alerta.cotizacionId || alerta.cotizacion_id || ''))
+          .filter(Boolean)
+      )
+
+      setCotizaciones((current) => current.map((cotizacion) => {
+        const tieneAlerta = idsConAlerta.has(String(cotizacion.id))
+
+        return {
+          ...cotizacion,
+          tieneMensajeNuevo: tieneAlerta,
+          tiene_mensaje_nuevo: tieneAlerta
+        }
+      }))
+    })
+
+    const limpiarLeido = escucharChatLeido(({ cotizacionId }) => {
+      if (!cotizacionId) {
+        return
+      }
+
+      setCotizaciones((current) => current.map((cotizacion) => {
+        if (String(cotizacion.id) !== String(cotizacionId)) {
+          return cotizacion
+        }
+
+        return {
+          ...cotizacion,
+          tieneMensajeNuevo: false,
+          tiene_mensaje_nuevo: false
+        }
+      }))
+    })
+
+    return () => {
+      limpiarAlertas()
+      limpiarLeido()
+    }
+  }, [])
+
   const usuarios = useMemo(() => {
     const uniqueUsers = new Map()
 
@@ -64,7 +108,7 @@ export default function HistorialCotizaciones() {
     return Array.from(
       new Set(
         cotizaciones
-          .map((cotizacion) => cotizacion.estado)
+          .map((cotizacion) => cotizacion.estadoPropuestaTexto)
           .filter(Boolean)
       )
     )
@@ -83,7 +127,7 @@ export default function HistorialCotizaciones() {
         !usuarioSeleccionado || String(cotizacion.usuarioCreadorId) === String(usuarioSeleccionado)
 
       const matchesStatus =
-        !estatusSeleccionado || cotizacion.estado === estatusSeleccionado
+        !estatusSeleccionado || cotizacion.estadoPropuestaTexto === estatusSeleccionado
 
       return matchesSearch && matchesUser && matchesStatus
     })

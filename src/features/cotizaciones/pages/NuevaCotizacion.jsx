@@ -23,6 +23,10 @@ export default function NuevaCotizacion() {
   const [formData, setFormData] = useState({
     nombreCampana: '',
     cliente: '',
+    fechaInicio: '',
+    fechaTermino: '',
+    tipoCompra: '',
+    presupuestoCliente: '',
     notasInternas: ''
   })
 
@@ -74,7 +78,11 @@ export default function NuevaCotizacion() {
     try {
       const resultado = prepararCotizacion({
         nombreCampana: formData.nombreCampana.trim(),
-        cliente: formData.cliente.trim()
+        cliente: formData.cliente.trim(),
+        fechaInicio: formData.fechaInicio.trim(),
+        fechaTermino: formData.fechaTermino.trim(),
+        tipoCompra: formData.tipoCompra.trim(),
+        presupuestoCliente: formData.presupuestoCliente.trim()
       })
 
       const cotizacionTemporal = {
@@ -205,6 +213,45 @@ export default function NuevaCotizacion() {
               placeholder="Ej. Aurea Telecom"
               value={formData.cliente}
               onChange={handleChange}
+            />
+
+            <CampoTexto
+              label="Fecha inicio"
+              name="fechaInicio"
+              placeholder="DD/MM/AAAA"
+              value={formData.fechaInicio}
+              onChange={handleChange}
+              inputMode="numeric"
+            />
+
+            <CampoTexto
+              label="Fecha fin"
+              name="fechaTermino"
+              placeholder="DD/MM/AAAA"
+              value={formData.fechaTermino}
+              onChange={handleChange}
+              inputMode="numeric"
+            />
+
+            <CampoTexto
+              as="select"
+              label="Tipo de compra"
+              name="tipoCompra"
+              value={formData.tipoCompra}
+              onChange={handleChange}
+            >
+              <option value="">Selecciona</option>
+              <option value="Directa">Directa</option>
+              <option value="PRG">PRG</option>
+            </CampoTexto>
+
+            <CampoTexto
+              label="Presupuesto cliente"
+              name="presupuestoCliente"
+              placeholder="0"
+              value={formData.presupuestoCliente}
+              onChange={handleChange}
+              inputMode="decimal"
             />
 
             <CampoTexto

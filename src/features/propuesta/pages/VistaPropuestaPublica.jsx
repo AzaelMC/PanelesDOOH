@@ -2,29 +2,65 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Boton from '../../../components/ui/Boton'
 import Tarjeta from '../../../components/ui/Tarjeta'
-import BuscadorPropuestaPublica from '../components/BuscadorPropuestaPublica'
-import ListadoPropuestaPublica from '../components/ListadoPropuestaPublica'
-import MapaPropuestaPublica from '../components/MapaPropuestaPublica'
-import StreetViewPropuestaPublica from '../components/StreetViewPropuestaPublica'
-import { obtenerSnapshotPublico } from '../services/propuestaPublicaApi'
-import { normalizarPantallasSnapshot } from '../utils/prepararPantallasPropuesta'
+import BuscadorPantallas from '../../mapa-cliente/components/BuscadorPantallas'
+import CabeceraMapaCliente from '../../mapa-cliente/components/CabeceraMapaCliente'
+import LienzoMapaPlaceholder from '../../mapa-cliente/components/LienzoMapaPlaceholder'
+import ModalStreetViewPlaceholder from '../../mapa-cliente/components/ModalStreetViewPlaceholder'
+import PanelListadoPantallas from '../../mapa-cliente/components/PanelListadoPantallas'
+import ChatPropuesta from '../../chat/components/ChatPropuesta'
+import {
+  cargarGoogleMapsMarkerPublico,
+  cargarGoogleMapsPublico,
+  obtenerGoogleMapsPublicConfig
+} from '../../../services/googleMapsPublicLoader'
+import { obtenerPropuestaPublica, obtenerUrlExcelPublico } from '../services/propuestaPublicaApi'
 
 const NTP_ICON_SRC = `${import.meta.env.BASE_URL}brand/ntp-icon.png`
 
-function HeadbarPropuestaPublica() {
+function HeadbarPropuestaPublica({ excelUrl = '' }) {
   return (
-    <header className="sticky top-0 z-40 bg-[#411189] text-white shadow-[0_18px_45px_rgba(65,17,137,0.24)]">
-      <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/95 p-2 shadow-sm">
+    <header className="ntp-headbar">
+      <div className="relative mx-auto flex w-full max-w-[1440px] items-center gap-4 px-4 py-5 sm:px-6 lg:px-8">
+        <div className="ntp-brand-mark flex h-14 w-14 items-center justify-center rounded-3xl p-3">
           <img
             src={NTP_ICON_SRC}
             alt="NTP Media"
             className="max-h-full max-w-full object-contain"
           />
         </div>
-        <p className="text-sm font-semibold tracking-[0.18em] text-white sm:text-base">
-          NTP Media / DOOH Maps
-        </p>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-[var(--ntp-nav-text)]">
+            NTP Media
+          </p>
+          <h1 className="ntp-page-title text-xl">DOOH Maps</h1>
+        </div>
+
+        {excelUrl && (
+          <Boton
+            as="a"
+            href={excelUrl}
+            variant="brandSecondary"
+            className="ml-auto gap-2 whitespace-nowrap !border-[#9E6DF7] !bg-[#9E6DF7] !text-white hover:!border-[#8a56f2] hover:!bg-[#8a56f2]"
+            aria-label="Descargar propuesta en Excel"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+            <span className="hidden sm:inline">Descargar Excel</span>
+            <span className="sm:hidden">Excel</span>
+          </Boton>
+        )}
       </div>
     </header>
   )
@@ -46,21 +82,11 @@ function useDebouncedValue(value, delay = 250) {
   return debouncedValue
 }
 
-function obtenerCotizacionSnapshot(snapshot = {}) {
-  const cotizacion = snapshot?.cotizacion && typeof snapshot.cotizacion === 'object'
-    ? snapshot.cotizacion
-    : {}
-
-  return {
-    id: cotizacion.id || null,
-    nombreCampana: cotizacion.nombreCampana || cotizacion.nombre_campana || 'Cotizacion sin nombre',
-    cliente: cotizacion.cliente || cotizacion.nombreCliente || cotizacion.nombre_cliente || '-',
-    totalPantallas: cotizacion.totalPantallas ?? null,
-    totalPantallasActivas: cotizacion.totalPantallasActivas ?? null
+function obtenerRegionesPantallas(pantallas = [], resumen = {}) {
+  if (Array.isArray(resumen?.regiones) && resumen.regiones.length > 0) {
+    return resumen.regiones
   }
-}
 
-function obtenerRegionesPantallas(pantallas = []) {
   const regiones = new Set()
 
   pantallas.forEach((pantalla) => {
@@ -78,8 +104,9 @@ function obtenerRegionesPantallas(pantallas = []) {
 
 export default function VistaPropuestaPublica() {
   const { token = '' } = useParams()
-  const [snapshot, setSnapshot] = useState(null)
+  const [propuesta, setPropuesta] = useState(null)
   const [cotizacion, setCotizacion] = useState(null)
+  const [cpm, setCpm] = useState(null)
   const [pantallas, setPantallas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -88,16 +115,18 @@ export default function VistaPropuestaPublica() {
   const [pantallaSeleccionadaId, setPantallaSeleccionadaId] = useState(null)
   const [centrarSeleccion, setCentrarSeleccion] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const excelUrl = obtenerUrlExcelPublico(token)
 
-  const cargarSnapshot = useCallback(async () => {
+  const cargarPropuesta = useCallback(async () => {
     const tokenLimpio = String(token || '').trim()
 
     if (!tokenLimpio) {
-      setSnapshot(null)
+      setPropuesta(null)
       setCotizacion(null)
+      setCpm(null)
       setPantallas([])
       setPantallaSeleccionadaId(null)
-      setError('La liga no contiene un token valido.')
+      setError('No se pudo cargar')
       setCargando(false)
       return
     }
@@ -106,33 +135,36 @@ export default function VistaPropuestaPublica() {
     setError('')
 
     try {
-      const snapshotPayload = await obtenerSnapshotPublico(tokenLimpio)
-      const pantallasSnapshot = normalizarPantallasSnapshot(snapshotPayload)
+      const payload = await obtenerPropuestaPublica(tokenLimpio)
 
-      setSnapshot(snapshotPayload)
-      setCotizacion(obtenerCotizacionSnapshot(snapshotPayload))
-      setPantallas(pantallasSnapshot)
-      setPantallaSeleccionadaId(pantallasSnapshot[0]?.id || null)
+      setPropuesta(payload)
+      setCotizacion(payload.cotizacion)
+      setCpm(payload.cpm)
+      setPantallas(payload.pantallas)
+      setPantallaSeleccionadaId(null)
       setCentrarSeleccion(false)
     } catch (loadError) {
-      setSnapshot(null)
+      setPropuesta(null)
       setCotizacion(null)
+      setCpm(null)
       setPantallas([])
       setPantallaSeleccionadaId(null)
       setCentrarSeleccion(false)
-      setError(loadError.message || 'Esta liga no esta disponible o ya expiro.')
+      setError(loadError.message || 'No se pudo cargar')
     } finally {
       setCargando(false)
     }
   }, [token])
 
   useEffect(() => {
-    cargarSnapshot()
-  }, [cargarSnapshot])
+    const timeoutId = window.setTimeout(() => {
+      cargarPropuesta()
+    }, 0)
 
-  useEffect(() => {
-    setCentrarSeleccion(false)
-  }, [busquedaDebounced])
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [cargarPropuesta])
 
   const pantallasFiltradas = useMemo(() => {
     const search = busquedaDebounced.trim().toLowerCase()
@@ -150,14 +182,13 @@ export default function VistaPropuestaPublica() {
   }, [pantallas, busquedaDebounced])
 
   const pantallaSeleccionada = useMemo(() => {
-    return (
-      pantallasFiltradas.find((pantalla) => pantalla.id === pantallaSeleccionadaId) ||
-      pantallasFiltradas[0] ||
-      null
-    )
+    return pantallasFiltradas.find((pantalla) => pantalla.id === pantallaSeleccionadaId) || null
   }, [pantallasFiltradas, pantallaSeleccionadaId])
 
-  const regiones = useMemo(() => obtenerRegionesPantallas(pantallas), [pantallas])
+  const regiones = useMemo(
+    () => obtenerRegionesPantallas(pantallas, propuesta?.resumen),
+    [pantallas, propuesta]
+  )
 
   const seleccionarPantalla = useCallback((id) => {
     setPantallaSeleccionadaId(id)
@@ -172,6 +203,37 @@ export default function VistaPropuestaPublica() {
     setModalOpen(false)
   }, [])
 
+  const actualizarEstadoAceptado = useCallback((estadoPropuesta = 'aceptada') => {
+    setCotizacion((current) => current
+      ? {
+          ...current,
+          estadoPropuesta,
+          estado_propuesta: estadoPropuesta,
+          fechaEstadoPropuesta: current.fechaEstadoPropuesta || current.fecha_estado_propuesta || new Date().toISOString(),
+          fecha_estado_propuesta: current.fecha_estado_propuesta || current.fechaEstadoPropuesta || new Date().toISOString()
+        }
+      : current)
+    setPropuesta((current) => current
+      ? {
+          ...current,
+          cotizacion: current.cotizacion
+            ? {
+                ...current.cotizacion,
+                estadoPropuesta,
+                estado_propuesta: estadoPropuesta
+              }
+            : current.cotizacion,
+          resumen: current.resumen
+            ? {
+                ...current.resumen,
+                estadoPropuesta,
+                estado_propuesta: estadoPropuesta
+              }
+            : current.resumen
+        }
+      : current)
+  }, [])
+
   if (cargando) {
     return (
       <div className="min-h-screen">
@@ -179,10 +241,7 @@ export default function VistaPropuestaPublica() {
         <main className="ntp-shell ntp-aurora-bg min-h-[calc(100vh-3.5rem)] px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[1440px]">
             <Tarjeta className="text-center">
-              <p className="text-lg font-medium text-slate-900">Cargando propuesta...</p>
-              <p className="mt-2 text-sm text-slate-500">
-                Recuperando pantallas congeladas para esta liga publica.
-              </p>
+              <p className="text-lg font-medium text-slate-900">Cargando mapa</p>
             </Tarjeta>
           </div>
         </main>
@@ -197,13 +256,10 @@ export default function VistaPropuestaPublica() {
         <main className="ntp-shell ntp-aurora-bg min-h-[calc(100vh-3.5rem)] px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[960px]">
             <Tarjeta className="space-y-4 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.36em] text-slate-500">
-                Propuesta DOOH
-              </p>
-              <p className="text-lg font-medium text-slate-900">No fue posible abrir esta liga.</p>
+              <p className="text-lg font-medium text-slate-900">No se pudo cargar</p>
               <p className="text-sm text-rose-700">{error}</p>
               <div className="flex justify-center">
-                <Boton onClick={cargarSnapshot}>
+                <Boton onClick={cargarPropuesta}>
                   Reintentar
                 </Boton>
               </div>
@@ -216,51 +272,34 @@ export default function VistaPropuestaPublica() {
 
   return (
     <div className="min-h-screen">
-      <HeadbarPropuestaPublica />
+      <HeadbarPropuestaPublica excelUrl={excelUrl} />
       <main className="ntp-shell ntp-aurora-bg min-h-[calc(100vh-3.5rem)] px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto w-full max-w-[1440px] space-y-6">
-          <Tarjeta className="space-y-5">
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-            {cotizacion?.nombreCampana || 'Cotizacion sin nombre'}
-          </h2>
+        <CabeceraMapaCliente
+          cotizacion={cotizacion}
+          cpm={cpm}
+          pantallas={pantallas}
+          regiones={regiones}
+        />
 
-          <dl className="grid gap-3 text-sm sm:grid-cols-[160px_minmax(0,1fr)]">
-            <dt className="font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Pantallas:
-            </dt>
-            <dd className="font-medium text-slate-950">
-              {pantallas.length}
-            </dd>
-
-            {regiones.length > 0 ? (
-              <>
-                <dt className="font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  Regiones:
-                </dt>
-                <dd className="leading-6 text-slate-700">
-                  {regiones.join(', ')}
-                </dd>
-              </>
-            ) : null}
-          </dl>
-          </Tarjeta>
-
-          {pantallas.length === 0 ? (
+        {pantallas.length === 0 ? (
           <Tarjeta className="text-center">
-            <p className="text-lg font-medium text-slate-900">No hay pantallas activas disponibles.</p>
-            <p className="mt-2 text-sm text-slate-500">
-              Esta propuesta publica no tiene pantallas activas congeladas para mostrar.
-            </p>
+            <p className="text-lg font-medium text-slate-900">Sin pantallas</p>
           </Tarjeta>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-            <div className="space-y-5">
-              <BuscadorPropuestaPublica
+          <div className="grid gap-6 xl:h-[720px] xl:grid-cols-[380px_minmax(0,1fr)]">
+            <div className="flex min-h-0 flex-col gap-5">
+              <BuscadorPantallas
+                name="busquedaPantallaPropuesta"
                 value={busqueda}
-                onChange={(event) => setBusqueda(event.target.value)}
+                onChange={(event) => {
+                  setBusqueda(event.target.value)
+                  setCentrarSeleccion(false)
+                }}
               />
 
-              <ListadoPropuestaPublica
+              <PanelListadoPantallas
+                className="xl:min-h-0"
                 pantallas={pantallasFiltradas}
                 pantallaSeleccionadaId={pantallaSeleccionadaId}
                 seleccionarPantalla={seleccionarPantalla}
@@ -268,19 +307,32 @@ export default function VistaPropuestaPublica() {
               />
             </div>
 
-            <MapaPropuestaPublica
+            <LienzoMapaPlaceholder
               pantallas={pantallasFiltradas}
               pantallaSeleccionada={pantallaSeleccionada}
               seleccionarPantalla={seleccionarPantalla}
               centrarSeleccion={centrarSeleccion}
+              cargarMaps={cargarGoogleMapsPublico}
+              cargarMarker={cargarGoogleMapsMarkerPublico}
+              obtenerMapsConfig={obtenerGoogleMapsPublicConfig}
             />
           </div>
-          )}
+        )}
 
-          <StreetViewPropuestaPublica
+        <ChatPropuesta
+          key={token}
+          modo="publico"
+          token={token}
+          nombreCampana={cotizacion?.nombreCampana || cotizacion?.nombre_campana || ''}
+          estadoPropuesta={cotizacion?.estadoPropuesta || cotizacion?.estado_propuesta}
+          onEstadoAceptado={actualizarEstadoAceptado}
+        />
+
+          <ModalStreetViewPlaceholder
             open={modalOpen}
             pantalla={pantallaSeleccionada}
             onClose={cerrarValidacionEntorno}
+            cargarMaps={cargarGoogleMapsPublico}
           />
         </div>
       </main>

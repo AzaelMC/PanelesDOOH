@@ -2,24 +2,11 @@ import { Link } from 'react-router-dom'
 import Boton from '../../../components/ui/Boton'
 import EtiquetaEstado from '../../../components/ui/EtiquetaEstado'
 import Tarjeta from '../../../components/ui/Tarjeta'
-
-function obtenerStatus(estado) {
-  const normalized = String(estado || '').toLowerCase()
-
-  if (normalized.includes('lista') || normalized.includes('cliente')) {
-    return 'success'
-  }
-
-  if (normalized.includes('pendiente')) {
-    return 'warning'
-  }
-
-  if (normalized.includes('validacion') || normalized.includes('geografica')) {
-    return 'info'
-  }
-
-  return 'pending'
-}
+import {
+  obtenerStatusEstadoPropuesta,
+  obtenerTextoEstadoPropuesta,
+  tieneMensajeNuevo
+} from '../utils/estadoPropuesta'
 
 function formatDate(date) {
   if (!date) {
@@ -40,12 +27,15 @@ function formatDate(date) {
 }
 
 export default function TarjetaCotizacion({ cotizacion }) {
+  const estadoPropuesta = cotizacion.estadoPropuesta || cotizacion.estado_propuesta
+  const mensajeNuevo = tieneMensajeNuevo(cotizacion)
+
   return (
     <Tarjeta className="ntp-glass-card flex h-full flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-3">
-          <EtiquetaEstado status={obtenerStatus(cotizacion.estado)}>
-            {cotizacion.estado}
+          <EtiquetaEstado status={obtenerStatusEstadoPropuesta(estadoPropuesta)}>
+            {obtenerTextoEstadoPropuesta(estadoPropuesta)}
           </EtiquetaEstado>
           <div>
             <h3 className="ntp-page-title text-xl">{cotizacion.nombreCampana}</h3>
@@ -72,13 +62,21 @@ export default function TarjetaCotizacion({ cotizacion }) {
         </div>
       </dl>
 
-      <div className="flex flex-wrap gap-3">
-        <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/tratamiento`} variant="brand">
-          Abrir tratamiento
-        </Boton>
-        <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/mapa`} variant="brandSecondary">
-          Ver mapa
-        </Boton>
+      <div className="mt-auto flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap gap-3">
+          <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/tratamiento`} variant="brand">
+            Abrir tratamiento
+          </Boton>
+          <Boton as={Link} to={`/cotizaciones/${cotizacion.id}/mapa`} variant="brandSecondary">
+            Ver mapa
+          </Boton>
+        </div>
+
+        {mensajeNuevo && (
+          <EtiquetaEstado status="info" className="ml-auto">
+            Mensaje nuevo
+          </EtiquetaEstado>
+        )}
       </div>
     </Tarjeta>
   )
