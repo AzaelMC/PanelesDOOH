@@ -67,25 +67,63 @@ function esCpmValido(value) {
   return number !== null && number > 0
 }
 
-function resolverTarifas(cpm = {}) {
-  const tarifas = cpm?.tarifas && typeof cpm.tarifas === 'object'
-    ? cpm.tarifas
+function normalizarTarifaCliente(value) {
+  const tarifa = String(value ?? '').trim().toLowerCase()
+  return ['ach', 'pepsico'].includes(tarifa) ? tarifa : null
+}
+
+function etiquetaCpmCliente(tarifa) {
+  if (tarifa === 'ach') {
+    return 'CPM (Tarifa ACH)'
+  }
+
+  if (tarifa === 'pepsico') {
+    return 'CPM (Tarifa PepsiCo)'
+  }
+
+  return 'CPM'
+}
+
+function resolverPresentacionCpm(cpm = {}) {
+  const presentacion = cpm?.presentacion && typeof cpm.presentacion === 'object'
+    ? cpm.presentacion
     : {}
-  const ach = [
-    tarifas?.ach,
+  const clienteApi = presentacion?.cliente && typeof presentacion.cliente === 'object'
+    ? presentacion.cliente
+    : null
+  const publicadaApi = presentacion?.publicada && typeof presentacion.publicada === 'object'
+    ? presentacion.publicada
+    : null
+
+  const tarifaCliente = normalizarTarifaCliente(
+    pickFirst(clienteApi?.tipo, cpm?.tarifa_cliente, cpm?.tarifaCliente, null)
+  )
+  const valorCliente = [
+    clienteApi?.valor,
     cpm?.cpm_cliente,
     cpm?.cpmCliente
   ].find(esCpmValido) ?? null
-  const publicadaBase = [
-    tarifas?.publicada,
+
+  const usarTp = normalizarBooleano(pickFirst(cpm?.usar_tp, cpm?.usarTp, false))
+  const valorPublicada = [
+    publicadaApi?.valor,
     cpm?.cpm_tp,
     cpm?.cpmTp
   ].find(esCpmValido) ?? null
-  const usarTp = normalizarBooleano(pickFirst(cpm?.usar_tp, cpm?.usarTp, false))
 
   return {
-    ach,
-    publicada: usarTp ? publicadaBase : null
+    cliente: valorCliente === null
+      ? null
+      : {
+          etiqueta: clienteApi?.etiqueta || etiquetaCpmCliente(tarifaCliente),
+          valor: valorCliente
+        },
+    publicada: usarTp && valorPublicada !== null
+      ? {
+          etiqueta: publicadaApi?.etiqueta || 'CPM (Tarifa Publicada)',
+          valor: valorPublicada
+        }
+      : null
   }
 }
 
@@ -101,6 +139,21 @@ function formatearMoneda(value) {
     currency: 'MXN',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
+  })
+}
+
+function formatearCpm(value) {
+  const number = toNumber(value)
+
+  if (number === null) {
+    return ''
+  }
+
+  return number.toLocaleString('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4
   })
 }
 
@@ -151,7 +204,7 @@ function construirCampos({ cotizacion = {}, cpm = {}, pantallas = [], regiones =
     cotizacion?.presupuestoCliente,
     cotizacion?.presupuesto_cliente
   )
-  const tarifas = resolverTarifas(cpm)
+  const presentacionCpm = resolverPresentacionCpm(cpm)
   const impresiones = pickFirst(
     cpm?.impresionesEstimadas,
     cpm?.impresiones_estimadas,
@@ -173,8 +226,14 @@ function construirCampos({ cotizacion = {}, cpm = {}, pantallas = [], regiones =
     principales: limpiarCampos([
       { label: 'Cliente', value: pickFirst(cotizacion?.cliente, cotizacion?.nombreCliente, cotizacion?.nombre_cliente) },
       { label: 'Presupuesto', value: formatearMoneda(presupuesto) },
-      { label: 'CPM (Tarifa ACH)', value: formatearMoneda(tarifas.ach) },
-      { label: 'CPM (Tarifa Publicada)', value: formatearMoneda(tarifas.publicada) },
+      {
+        label: presentacionCpm.cliente?.etiqueta || 'CPM',
+        value: formatearCpm(presentacionCpm.cliente?.valor)
+      },
+      {
+        label: presentacionCpm.publicada?.etiqueta || 'CPM (Tarifa Publicada)',
+        value: formatearCpm(presentacionCpm.publicada?.valor)
+      },
       { label: 'Impresiones', value: formatearNumero(impresiones) },
       { label: 'Pantallas', value: formatearNumero(pantallasValor) },
       { label: 'Regiones', value: regionesTexto }

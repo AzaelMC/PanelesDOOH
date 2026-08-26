@@ -113,19 +113,19 @@ function normalizarCotizacionPublica(propuesta = {}) {
 function normalizarCpmPublico(propuesta = {}) {
   const cpm = propuesta?.cpm && typeof propuesta.cpm === 'object' ? propuesta.cpm : {}
   const resumen = propuesta?.resumen && typeof propuesta.resumen === 'object' ? propuesta.resumen : {}
-  const tarifasBase = cpm?.tarifas && typeof cpm.tarifas === 'object'
-    ? cpm.tarifas
-    : {}
+  const presentacionBase = cpm?.presentacion && typeof cpm.presentacion === 'object'
+    ? cpm.presentacion
+    : (resumen?.presentacion && typeof resumen.presentacion === 'object' ? resumen.presentacion : {})
   const cpmCliente = pickFirst(cpm.cpmCliente, cpm.cpm_cliente, '')
   const cpmTp = pickFirst(cpm.cpmTp, cpm.cpm_tp, '')
   const usarTp = pickFirst(cpm.usarTp, cpm.usar_tp, false)
+  const tarifaCliente = pickFirst(cpm.tarifaCliente, cpm.tarifa_cliente, '')
 
   return {
     ...cpm,
-    tarifas: {
-      ach: pickFirst(tarifasBase.ach, cpmCliente, null) ?? null,
-      publicada: pickFirst(tarifasBase.publicada, cpmTp, null) ?? null
-    },
+    presentacion: presentacionBase,
+    tarifaCliente,
+    tarifa_cliente: tarifaCliente,
     cpmCliente,
     cpm_cliente: cpmCliente,
     cpmTp,

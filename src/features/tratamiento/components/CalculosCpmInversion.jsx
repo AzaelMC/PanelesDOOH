@@ -20,8 +20,8 @@ function formatCurrency(value) {
   return new Intl.NumberFormat('es-MX', {
     style: 'currency',
     currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4
   }).format(safeValue)
 }
 
@@ -41,7 +41,7 @@ function formatFormulaNumber(value) {
   }).format(safeValue)
 }
 
-function formatInputNumber(value, decimals = 2) {
+function formatInputNumber(value, decimals = 4) {
   if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
     return ''
   }
@@ -133,7 +133,7 @@ function ResultadoCopiable({
   onCopy,
   disabled = false,
   formatter = formatCurrency,
-  copyDecimals = 2
+  copyDecimals = 4
 }) {
   const formattedValue = formatter(value)
   const copied = copiedKey === id
@@ -423,6 +423,20 @@ export default function CalculosCpmInversion({ cotizacionId, presupuestoClienteI
             onCopy={handleCopy}
             disabled={disabled}
           />
+
+          <FieldRow label="Tarifa cliente">
+            <select
+              name="tarifa_cliente"
+              value={formData.tarifa_cliente}
+              onChange={handleChange}
+              disabled={disabled || !cpmInicialCargado}
+              className={INPUT_CLASSES}
+            >
+              <option value="">CPM</option>
+              <option value="ach">Tarifa ACH</option>
+              <option value="pepsico">Tarifa PepsiCo</option>
+            </select>
+          </FieldRow>
 
           <label className="flex items-center gap-3 text-sm text-slate-600">
             <input

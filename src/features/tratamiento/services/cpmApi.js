@@ -8,6 +8,7 @@ export const CPM_ESTADO_INICIAL = {
   extra_rebate: '',
   margen: '',
   fased: '',
+  tarifa_cliente: '',
   usar_tp: false,
   tp: '',
   cpm_fuente: 'cliente',
@@ -52,6 +53,10 @@ function normalizarFuente(valor) {
   return ['cliente', 'tp', 'manual'].includes(valor) ? valor : 'cliente'
 }
 
+function normalizarTarifaCliente(valor) {
+  return ['ach', 'pepsico'].includes(valor) ? valor : ''
+}
+
 function extraerCpmDesdeRespuesta(response) {
   const cpm = response?.cpm ?? null
   const presupuestoCliente = pickFirst(
@@ -85,6 +90,7 @@ export function mapearCpmApiAEstado(cpm, { presupuestoClienteInicial = '' } = {}
     extra_rebate: numeroAInput(cpm.extra_rebate),
     margen: numeroAInput(cpm.margen),
     fased: numeroAInput(cpm.fased),
+    tarifa_cliente: normalizarTarifaCliente(pickFirst(cpm.tarifa_cliente, cpm.tarifaCliente, '')),
     usar_tp: normalizarBooleano(cpm.usar_tp),
     tp: numeroAInput(cpm.tp),
     cpm_fuente: normalizarFuente(cpm.cpm_fuente),
@@ -103,6 +109,7 @@ export function construirPayloadCpm(cotizacionId, estado) {
     extra_rebate: estado.extra_rebate,
     margen: estado.margen,
     fased: estado.fased,
+    tarifa_cliente: normalizarTarifaCliente(estado.tarifa_cliente) || null,
     usar_tp: Boolean(estado.usar_tp),
     tp: estado.usar_tp ? estado.tp : null,
     cpm_fuente: normalizarFuente(estado.cpm_fuente),
