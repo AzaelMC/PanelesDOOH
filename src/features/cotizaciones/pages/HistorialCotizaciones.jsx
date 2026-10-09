@@ -3,7 +3,8 @@ import Boton from '../../../components/ui/Boton'
 import Tarjeta from '../../../components/ui/Tarjeta'
 import FiltrosCotizaciones from '../components/FiltrosCotizaciones'
 import TarjetaCotizacion from '../components/TarjetaCotizacion'
-import { obtenerCotizaciones } from '../services/cotizacionesApi'
+import ModalEliminarCotizacion from '../components/ModalEliminarCotizacion'
+import { eliminarCotizacion, obtenerCotizaciones } from '../services/cotizacionesApi'
 import { escucharAlertasChat, escucharChatLeido } from '../../chat/utils/eventosChat'
 
 export default function HistorialCotizaciones() {
@@ -13,6 +14,9 @@ export default function HistorialCotizaciones() {
   const [cotizaciones, setCotizaciones] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [cotizacionAEliminar, setCotizacionAEliminar] = useState(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [errorEliminacion, setErrorEliminacion] = useState('')
 
   useEffect(() => {
     let active = true
@@ -133,6 +137,42 @@ export default function HistorialCotizaciones() {
     })
   }, [busqueda, cotizaciones, estatusSeleccionado, usuarioSeleccionado])
 
+
+  const solicitarEliminarCotizacion = (cotizacion) => {
+    setCotizacionAEliminar(cotizacion)
+    setErrorEliminacion('')
+  }
+
+  const cerrarModalEliminar = () => {
+    if (eliminando) {
+      return
+    }
+
+    setCotizacionAEliminar(null)
+    setErrorEliminacion('')
+  }
+
+  const confirmarEliminarCotizacion = async () => {
+    if (!cotizacionAEliminar?.id || eliminando) {
+      return
+    }
+
+    setEliminando(true)
+    setErrorEliminacion('')
+
+    try {
+      await eliminarCotizacion(cotizacionAEliminar.id)
+      setCotizaciones((current) => current.filter(
+        (cotizacion) => String(cotizacion.id) !== String(cotizacionAEliminar.id)
+      ))
+      setCotizacionAEliminar(null)
+    } catch (deleteError) {
+      setErrorEliminacion(deleteError.message || 'No fue posible eliminar la cotización.')
+    } finally {
+      setEliminando(false)
+    }
+  }
+
   const filtrosActivos = Boolean(busqueda.trim() || usuarioSeleccionado || estatusSeleccionado)
 
   return (
@@ -196,7 +236,11 @@ export default function HistorialCotizaciones() {
       {!cargando && !error && cotizacionesFiltradas.length > 0 && (
         <section className="grid gap-6 xl:grid-cols-2">
           {cotizacionesFiltradas.map((cotizacion) => (
-            <TarjetaCotizacion key={cotizacion.id} cotizacion={cotizacion} />
+            <TarjetaCotizacion
+              key={cotizacion.id}
+              cotizacion={cotizacion}
+              onSolicitarEliminar={solicitarEliminarCotizacion}
+            />
           ))}
         </section>
       )}
@@ -213,6 +257,14 @@ export default function HistorialCotizaciones() {
           </p>
         </Tarjeta>
       )}
+      <ModalEliminarCotizacion
+        open={Boolean(cotizacionAEliminar)}
+        cotizacion={cotizacionAEliminar}
+        procesando={eliminando}
+        error={errorEliminacion}
+        onClose={cerrarModalEliminar}
+        onConfirm={confirmarEliminarCotizacion}
+      />
     </div>
   )
 }

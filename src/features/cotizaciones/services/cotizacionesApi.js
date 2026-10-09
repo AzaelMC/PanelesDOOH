@@ -3,6 +3,7 @@ import apiClient from '../../../services/apiClient'
 import { cotizacionesMock } from '../data/cotizacionesMock'
 import { tratamientoCotizacionMock } from '../../tratamiento/data/tratamientoCotizacionMock'
 import { normalizarEstadoPropuesta, obtenerTextoEstadoPropuesta, tieneMensajeNuevo } from '../utils/estadoPropuesta'
+import { normalizarFechaManual } from '../utils/normalizarFechaManual'
 
 const COLUMNAS_BASE = [
   { key: 'screenName', label: 'Screen name' },
@@ -544,8 +545,8 @@ function construirPayloadInicioActualizacion(cotizacion = {}, totalCambios = 0) 
     cliente: limpiarTextoParaApi(pickFirst(cotizacion.cliente, ''), { maxLength: 255 }),
     nombreArchivo: limpiarTextoParaApi(pickFirst(cotizacion.nombreArchivo, ''), { maxLength: 255 }),
     nombreHoja: limpiarTextoParaApi(pickFirst(cotizacion.nombreHoja, ''), { maxLength: 255 }),
-    fecha_inicio: limpiarTextoParaApi(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, ''), { maxLength: 20 }),
-    fecha_termino: limpiarTextoParaApi(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, ''), { maxLength: 20 }),
+    fecha_inicio: limpiarTextoParaApi(normalizarFechaManual(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, '')), { maxLength: 20 }),
+    fecha_termino: limpiarTextoParaApi(normalizarFechaManual(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, '')), { maxLength: 20 }),
     tipo_compra: limpiarTextoParaApi(pickFirst(cotizacion.tipoCompra, cotizacion.tipo_compra, ''), { maxLength: 100 }),
     presupuesto_cliente: normalizarDecimalParaApi(pickFirst(cotizacion.presupuestoCliente, cotizacion.presupuesto_cliente)),
     notasInternas: limpiarTextoParaApi(pickFirst(cotizacion.notasInternas, ''), { maxLength: 4000 }),
@@ -693,8 +694,8 @@ export function normalizarPayloadCotizacionParaApi(cotizacion = {}) {
     cliente: limpiarTextoParaApi(pickFirst(cotizacion.cliente, ''), { maxLength: 255 }),
     nombreArchivo: limpiarTextoParaApi(pickFirst(cotizacion.nombreArchivo, ''), { maxLength: 255 }),
     nombreHoja: limpiarTextoParaApi(pickFirst(cotizacion.nombreHoja, ''), { maxLength: 255 }),
-    fecha_inicio: limpiarTextoParaApi(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, ''), { maxLength: 20 }),
-    fecha_termino: limpiarTextoParaApi(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, ''), { maxLength: 20 }),
+    fecha_inicio: limpiarTextoParaApi(normalizarFechaManual(pickFirst(cotizacion.fechaInicio, cotizacion.fecha_inicio, '')), { maxLength: 20 }),
+    fecha_termino: limpiarTextoParaApi(normalizarFechaManual(pickFirst(cotizacion.fechaTermino, cotizacion.fecha_termino, '')), { maxLength: 20 }),
     tipo_compra: limpiarTextoParaApi(pickFirst(cotizacion.tipoCompra, cotizacion.tipo_compra, ''), { maxLength: 100 }),
     presupuesto_cliente: normalizarDecimalParaApi(pickFirst(cotizacion.presupuestoCliente, cotizacion.presupuesto_cliente)),
     notasInternas: limpiarTextoParaApi(pickFirst(cotizacion.notasInternas, ''), { maxLength: 4000 }),
@@ -1206,11 +1207,11 @@ export async function actualizarCotizacion(id, payload) {
   return actualizarCotizacionPorCambios(id, payload)
 }
 
-export async function archivarCotizacion(id) {
+export async function eliminarCotizacion(id) {
   if (AUTH_MOCK_ENABLED) {
     return {
       ok: true,
-      mensaje: 'Cotizacion archivada en modo mock.'
+      mensaje: 'Cotizacion eliminada en modo mock.'
     }
   }
 
@@ -1218,7 +1219,7 @@ export async function archivarCotizacion(id) {
 
   return {
     ok: response?.ok ?? true,
-    mensaje: response?.mensaje || 'Cotizacion archivada correctamente.',
+    mensaje: response?.mensaje || 'Cotizacion eliminada correctamente.',
     raw: response
   }
 }

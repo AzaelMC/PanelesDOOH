@@ -26,7 +26,7 @@ function formatDate(date) {
   }).format(parsed)
 }
 
-export default function TarjetaCotizacion({ cotizacion }) {
+export default function TarjetaCotizacion({ cotizacion, onSolicitarEliminar }) {
   const estadoPropuesta = cotizacion.estadoPropuesta || cotizacion.estado_propuesta
   const mensajeNuevo = tieneMensajeNuevo(cotizacion)
 
@@ -42,7 +42,8 @@ export default function TarjetaCotizacion({ cotizacion }) {
             <p className="mt-1 text-sm text-slate-500">{cotizacion.cliente}</p>
           </div>
         </div>
-        <div className="ntp-soft-panel rounded-3xl px-4 py-3 text-right">
+
+        <div className="ntp-soft-panel shrink-0 rounded-3xl px-4 py-3 text-right">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pantallas</p>
           <p className="ntp-page-title text-xl">{cotizacion.totalPantallas}</p>
           <p className="mt-1 text-xs text-slate-500">
@@ -72,11 +73,22 @@ export default function TarjetaCotizacion({ cotizacion }) {
           </Boton>
         </div>
 
-        {mensajeNuevo && (
-          <EtiquetaEstado status="info" className="ml-auto">
-            Mensaje nuevo
-          </EtiquetaEstado>
-        )}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          {mensajeNuevo && (
+            <EtiquetaEstado status="info">
+              Mensaje nuevo
+            </EtiquetaEstado>
+          )}
+
+          <Boton
+            variant="danger"
+            size="sm"
+            onClick={() => onSolicitarEliminar?.(cotizacion)}
+            className="whitespace-nowrap"
+          >
+            Eliminar cotización
+          </Boton>
+        </div>
       </div>
     </Tarjeta>
   )

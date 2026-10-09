@@ -13,6 +13,7 @@ import TablaVistaUbicaciones from '../../excel-import/components/TablaVistaUbica
 import VistaColumnas from '../../excel-import/components/VistaColumnas'
 import { useAnalizadorExcel } from '../../excel-import/hooks/useAnalizadorExcel'
 import { crearCotizacion } from '../services/cotizacionesApi'
+import { normalizarFechaManual } from '../utils/normalizarFechaManual'
 
 const STORAGE_KEY = 'dooh_cotizacion_temporal'
 
@@ -69,6 +70,20 @@ export default function NuevaCotizacion() {
     }
   }
 
+  const handleBlurFecha = (event) => {
+    const { name, value } = event.target
+    const fechaNormalizada = normalizarFechaManual(value)
+
+    if (fechaNormalizada === value) {
+      return
+    }
+
+    setFormData((current) => ({
+      ...current,
+      [name]: fechaNormalizada
+    }))
+  }
+
   const handleContinue = async () => {
     if (!puedeContinuar) {
       setErrorFormulario('Completa campana, cliente y aseguremos al menos una ubicacion valida.')
@@ -79,8 +94,8 @@ export default function NuevaCotizacion() {
       const resultado = prepararCotizacion({
         nombreCampana: formData.nombreCampana.trim(),
         cliente: formData.cliente.trim(),
-        fechaInicio: formData.fechaInicio.trim(),
-        fechaTermino: formData.fechaTermino.trim(),
+        fechaInicio: normalizarFechaManual(formData.fechaInicio),
+        fechaTermino: normalizarFechaManual(formData.fechaTermino),
         tipoCompra: formData.tipoCompra.trim(),
         presupuestoCliente: formData.presupuestoCliente.trim()
       })
@@ -221,6 +236,7 @@ export default function NuevaCotizacion() {
               placeholder="DD/MM/AAAA"
               value={formData.fechaInicio}
               onChange={handleChange}
+              onBlur={handleBlurFecha}
               inputMode="numeric"
             />
 
@@ -230,6 +246,7 @@ export default function NuevaCotizacion() {
               placeholder="DD/MM/AAAA"
               value={formData.fechaTermino}
               onChange={handleChange}
+              onBlur={handleBlurFecha}
               inputMode="numeric"
             />
 
